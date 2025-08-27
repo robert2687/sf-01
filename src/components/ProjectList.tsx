@@ -1,1 +1,0 @@
-// This file is deprecated. Its contents have been merged into the version at '/components/ProjectList.tsx' to resolve structural conflicts.

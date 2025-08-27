@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo } from 'react';
 import { useProjects } from '../context/ProjectContext';
 import { Card } from './common/Card';
@@ -12,7 +11,7 @@ interface ProjectListProps {
   onSelectProject: (id: string) => void;
 }
 
-export const ProjectList: React.FC<ProjectListProps> = ({ onSelectProject }) => {
+export function ProjectList({ onSelectProject }: ProjectListProps): React.ReactElement {
   const { projects, addProject, updateProject } = useProjects();
   const [showForm, setShowForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -41,7 +40,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ onSelectProject }) => 
   }, [projects, searchTerm, sortBy]);
 
 
-  const handleAddProject = (e: React.FormEvent) => {
+  function handleAddProject(e: React.FormEvent) {
     e.preventDefault();
     if (newProjectName.trim()) {
       addProject(newProjectName, newProjectDesc);
@@ -49,9 +48,9 @@ export const ProjectList: React.FC<ProjectListProps> = ({ onSelectProject }) => 
       setNewProjectDesc('');
       setShowForm(false);
     }
-  };
+  }
 
-  const handleGeneratePreview = async (project: Project) => {
+  async function handleGeneratePreview(project: Project) {
     setGeneratingPreviewId(project.id);
     try {
         const imageUrl = await generateProjectPreviewImage(project);
@@ -66,7 +65,7 @@ export const ProjectList: React.FC<ProjectListProps> = ({ onSelectProject }) => 
     } finally {
         setGeneratingPreviewId(null);
     }
-  };
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">

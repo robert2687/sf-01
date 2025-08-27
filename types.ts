@@ -1,4 +1,7 @@
 
+
+import { ToolName } from './agent/tools';
+
 // Agent Persona for configuration
 export interface AgentPersona {
   id: string;
@@ -9,20 +12,28 @@ export interface AgentPersona {
 }
 
 
-// Content from agent/task.ts moved here to break circular dependency
-export enum TaskStatus {
-  PENDING = 'PENDING',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
+// --- TaskStatus ---
+export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+let _TaskStatus: { [K in TaskStatus]: K } | null = null;
+export function getTaskStatus() {
+    if (!_TaskStatus) {
+        _TaskStatus = Object.freeze({
+            PENDING: 'PENDING',
+            IN_PROGRESS: 'IN_PROGRESS',
+            COMPLETED: 'COMPLETED',
+            FAILED: 'FAILED',
+        });
+    }
+    return _TaskStatus;
 }
+
 
 export interface Task {
   id: string;
   name: string;
   description: string;
   status: TaskStatus;
-  toolName: string;
+  toolName: ToolName;
   arguments: any;
   result?: any;
   error?: string;
@@ -41,18 +52,36 @@ export interface ExecutionPlan {
 }
 
 
-export enum DesignInputType {
-  TEXT = 'TEXT',
-  IMAGE = 'IMAGE',
-  DXF = 'DXF',
+// --- DesignInputType ---
+export type DesignInputType = 'TEXT' | 'IMAGE' | 'DXF';
+let _DesignInputType: { [K in DesignInputType]: K } | null = null;
+export function getDesignInputType() {
+    if (!_DesignInputType) {
+        _DesignInputType = Object.freeze({
+            TEXT: 'TEXT',
+            IMAGE: 'IMAGE',
+            DXF: 'DXF',
+        });
+    }
+    return _DesignInputType;
 }
 
-export enum ModelStatus {
-  PENDING = 'PENDING',
-  GENERATING = 'GENERATING',
-  COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
+
+// --- ModelStatus ---
+export type ModelStatus = 'PENDING' | 'GENERATING' | 'COMPLETED' | 'FAILED';
+let _ModelStatus: { [K in ModelStatus]: K } | null = null;
+export function getModelStatus() {
+    if (!_ModelStatus) {
+        _ModelStatus = Object.freeze({
+            PENDING: 'PENDING',
+            GENERATING: 'GENERATING',
+            COMPLETED: 'COMPLETED',
+            FAILED: 'FAILED',
+        });
+    }
+    return _ModelStatus;
 }
+
 
 export interface DesignInput {
   id: string;
@@ -113,4 +142,18 @@ export interface CfdAnalysisResult {
     report: string; // Markdown formatted report
     data: string;   // CSV formatted data
     imageUrl: string; // base64 data URL for the plot image
+}
+
+export interface ProjectContextType {
+  projects: Project[];
+  addProject: (name: string, description: string) => void;
+  getProjectById: (id: string) => Project | undefined;
+  addInputToProject: (projectId: string, input: Omit<DesignInput, 'id'>) => void;
+  addModelToProject: (projectId: string, model: Omit<ModelOutput, 'id'>) => string;
+  updateModel: (projectId: string, modelId: string, updates: Partial<ModelOutput>) => void;
+  updateProject: (projectId: string, updates: Partial<Project>) => void;
+  getInputsByIds: (projectId: string, inputIds: string[]) => DesignInput[];
+  addPlanToProject: (projectId: string, plan: ExecutionPlan) => void;
+  updatePlan: (projectId: string, planId: string, updates: Partial<ExecutionPlan>) => void;
+  updateTaskInPlan: (projectId: string, planId: string, taskId: string, updates: Partial<Task>) => void;
 }

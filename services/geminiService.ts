@@ -1,20 +1,30 @@
 
+
 import { GoogleGenAI, GenerateContentResponse, Part, Type } from "@google/genai";
-import { DesignInput, DesignInputType, Project, BillOfMaterialsItem, StructuralAnalysisResult, CfdAnalysisResult } from '../types';
+import { DesignInput, DesignInputType, Project, BillOfMaterialsItem, StructuralAnalysisResult, CfdAnalysisResult, getDesignInputType } from '../types';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+var ai: GoogleGenAI | null = null;
+
+// Lazy initialization to avoid a top-level constructor call, which can cause issues in some module parsing environments.
+function getAi(): GoogleGenAI {
+    if (!ai) {
+        ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+    return ai;
+}
+
 
 function dataUrlToGeminiPart(dataUrl: string, fileName?: string): Part {
-  const [header, data] = dataUrl.split(',');
-  const mimeTypeMatch = header.match(/:(.*?);/);
+  let [header, data] = dataUrl.split(',');
+  let mimeTypeMatch = header.match(/:(.*?);/);
   if (!mimeTypeMatch || !data) {
     throw new Error(`Invalid data URL format for file: ${fileName}`);
   }
-  const mimeType = mimeTypeMatch[1];
+  let mimeType = mimeTypeMatch[1];
   
   return {
     inlineData: {
@@ -24,16 +34,20 @@ function dataUrlToGeminiPart(dataUrl: string, fileName?: string): Part {
   };
 }
 
-export const generateModelDescription = async (
+export async function generateModelDescription(
   inputs: DesignInput[], 
   refinementText?: string,
   systemPrompt?: string
-): Promise<string> => {
+): Promise<string> {
   try {
-    const systemInstruction = systemPrompt || `You are a sophisticated AI agent assisting steel structure engineers and fabricators. Your task is to interpret various inputs (text descriptions, reference images, hand-drawn sketches, DXF CAD files) and generate a coherent, detailed, and technical description for a 3D model of a steel structure. Be precise about components (e.g., I-beams, trusses, columns), dimensions, connections, and overall architectural style. The output must be a single block of text describing the final 3D model.`;
+    let systemInstruction = systemPrompt || `You are a sophisticated AI agent assisting steel structure engineers and fabricators. Your task is to interpret various inputs (text descriptions, reference images, hand-drawn sketches, DXF CAD files) and generate a coherent, detailed, and technical description for a 3D model of a steel structure. 
+- Be precise about components (e.g., I-beams, trusses, columns), dimensions, connections, and overall architectural style. 
+- When a DXF file is provided, treat its content as precise 2D geometric data, including coordinates, layers, and entities, to accurately inform the 3D model's layout and dimensions.
+- The output must be a single block of text describing the final 3D model.`;
 
     let userPrompt = "Generate a 3D model description based on the following inputs:\n\n";
-    const contentParts: Part[] = [];
+    let contentParts: Part[] = [];
+    let DesignInputType = getDesignInputType();
 
     inputs.forEach((input, index) => {
       if (input.type === DesignInputType.TEXT) {
@@ -52,7 +66,7 @@ export const generateModelDescription = async (
 
     contentParts.unshift({ text: userPrompt });
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
+    let response: GenerateContentResponse = await getAi().models.generateContent({
       model: 'gemini-2.5-flash',
       contents: { parts: contentParts },
       config: {
@@ -71,456 +85,254 @@ export const generateModelDescription = async (
   }
 };
 
-export const generateModelData = async (description: string, systemPrompt?: string): Promise<{ modelCode: string; billOfMaterials: BillOfMaterialsItem[]; engineeringRationale: string; }> => {
-  const MAX_RETRIES = 3;
+export async function generateModelData(
+  description: string,
+  systemPrompt?: string
+): Promise<{ modelCode: string; billOfMaterials: BillOfMaterialsItem[]; engineeringRationale: string }> {
+  let MAX_RETRIES = 3;
 
-  const systemInstruction = systemPrompt || `You are an expert structural detailer and AI assistant for 3D modeling.
-Your task is to convert a textual description of a steel structure into a single, valid JSON object containing three things:
-1.  A 'modelCode' string: a React component for @react-three/fiber that visualizes the structure.
-2.  An 'engineeringRationale' string: an explanation of the key structural choices made.
-3.  A 'billOfMaterials' array: a list of the components.
+  let systemInstruction = systemPrompt || `You are an expert in 3D modeling and React component generation, specifically using @react-three/drei and THREE.js. Your task is to convert a technical description of a steel structure into a JSON object containing a React component string, a Bill of Materials, and an engineering rationale.
 
---- RESPONSE FORMAT RULES ---
-1.  **Single JSON Object:** Your entire response MUST be a single, raw JSON object. Do not include any other text, explanations, or markdown formatting (like \`\`\`json). The JSON object MUST be complete and strictly adhere to the provided schema.
+**CRITICAL RULES:**
+1.  **NO JSX SYNTAX:** The output `modelCode` string **MUST** use \`React.createElement()\` exclusively. Do not use JSX tags like \`<Drei.Box>\`.
+2.  **USE GLOBAL VARIABLES:** The code **MUST** reference libraries from the \`window\` object (e.g., \`window.React\`, \`window.THREE\`, \`window.ReactThreeDrei\`). Do **NOT** include any \`import\` statements.
+3.  **DEFAULT EXPORT:** The generated code string **MUST** have a default export of a functional React component.
+4.  **SYNTACTICALLY CORRECT:** The generated Javascript code must be 100% syntactically correct and ready for dynamic import.
+5.  **COMPLETE JSON:** The entire output must be a single, valid JSON object that adheres to the provided schema.
 
---- 'modelCode' GENERATION RULES (CRITICAL) ---
-1.  **Default Export is Mandatory:** The 'modelCode' value MUST be a JavaScript string that contains a single \`export default\` of an anonymous arrow function. This is the most critical rule.
-2.  **Use 'React.createElement':** You MUST NOT use JSX. All elements must be created with \`React.createElement\`.
-3.  **Use Global Libraries:** The function will have access to global variables: \`React\`, \`THREE\`, and \`Drei\`. You MUST NOT include \`import\` statements in your code string.
-4.  **Structural Realism:** Generate plausible structures using standard profiles (I-beams, trusses) instead of simple cubes for complex descriptions.
-5.  **Scaling:** The final model should be scaled to fit within a ~15 unit bounding box.
+**EXAMPLE of CORRECT `modelCode` SYNTAX:**
+\`\`\`javascript
+export default function Model(props) {
+  const React = window.React;
+  const Drei = window.ReactThreeDrei;
+  const THREE = window.THREE;
+  const beamMaterial = React.useMemo(() => new THREE.MeshStandardMaterial({ color: '#cccccc' }), []);
+  return React.createElement(
+    'group',
+    props,
+    React.createElement(Drei.Box, { args: [0.5, 5, 0.5], material: beamMaterial, position: [-5, 2.5, 5] })
+  );
+}
+\`\`\`
 
---- 'modelCode' EXAMPLE ---
-This is an example of a PERFECT \`modelCode\` string value:
-"export default (props) => { const React = window.React; const Drei = window.ReactThreeDrei; return React.createElement(Drei.Box, { ...props, args: [10, 0.5, 0.5] }); }"
+**FINAL CHECK:** Before outputting the JSON, mentally review the `modelCode` string. Does it contain any JSX? Does it have import statements? Is it a valid default export? If any of these are true, fix it. Your final response MUST be only the raw JSON.`;
 
---- RATIONALE & BOM RULES ---
-- The 'engineeringRationale' should briefly explain key design choices (e.g., "IPE-300 columns were chosen to handle the 15m span...").
-- The 'billOfMaterials' must accurately reflect the components generated in the 'modelCode'.
-`;
-
-  const userPrompt = `Generate the JSON output for the following description:\n\nDescription: "${description}"`;
-    
-  const schema = {
-      type: Type.OBJECT,
-      properties: {
-          modelCode: {
-              type: Type.STRING,
-              description: "The Javascript code for the React Three Fiber component. Must not contain any markdown formatting."
-          },
-          engineeringRationale: {
-              type: Type.STRING,
-              description: "A brief explanation of the structural design choices made in the model code."
-          },
-          billOfMaterials: {
-              type: Type.ARRAY,
-              description: "A list of all components required for the structure.",
-              items: {
-                  type: Type.OBJECT,
-                  properties: {
-                      component: { type: Type.STRING, description: "Name of the structural component." },
-                      quantity: { type: Type.INTEGER, description: "Total number of this component." },
-                      estimatedMaterial: { type: Type.STRING, description: "Material specification for a single component (e.g., length and profile)." }
-                  },
-                  required: ["component", "quantity", "estimatedMaterial"]
-              }
-          }
-      },
-      required: ["modelCode", "billOfMaterials", "engineeringRationale"]
-  };
-  
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: userPrompt,
-            config: {
-                systemInstruction,
-                temperature: 0.3 + (attempt - 1) * 0.1, // Increase temperature slightly on retries
-                responseMimeType: "application/json",
-                responseSchema: schema,
-            }
-        });
-
-        const textResponse = response.text.trim();
-        const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            throw new Error("No valid JSON object found in AI response.");
-        }
-        
-        const jsonString = jsonMatch[0];
-        const data = JSON.parse(jsonString);
-        
-        if (!data.modelCode || !data.billOfMaterials || !data.engineeringRationale || !data.modelCode.includes('export default')) {
-            throw new Error('Generated JSON is missing required fields or model code is invalid.');
-        }
-        
-        return data;
-
-    } catch (error) {
-        console.error(`Error generating model data on attempt ${attempt}:`, error);
-        if (attempt === MAX_RETRIES) {
-            if (error instanceof Error) {
-                throw new Error(`Failed to generate model data after ${MAX_RETRIES} attempts: ${error.message}`);
-            }
-            throw new Error(`An unknown error occurred during data generation after ${MAX_RETRIES} attempts.`);
-        }
-        await new Promise(res => setTimeout(res, 1000));
-    }
-  }
-
-  throw new Error(`Failed to generate model data after all ${MAX_RETRIES} retries.`);
-};
-
-// Internal helper to generate a concise summary of project inputs.
-const _generateProjectSummaryForImage = async (project: Project): Promise<string> => {
-    const systemInstruction = "You are an expert in architectural visualization. Your task is to summarize the key visual elements from the provided project data into a single, vivid sentence for a text-to-image prompt. Focus on the structure type, key materials, and overall shape.";
-    
-    let prompt = "Summarize the following project details into one descriptive sentence:\n";
-    prompt += `Name: ${project.name}\n`;
-    prompt += `Description: ${project.description}\n`;
-    project.inputs.forEach(input => {
-        if (input.type === DesignInputType.TEXT) {
-            prompt += `- Input: ${input.data.substring(0, 200)}\n`;
-        }
-    });
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: { systemInstruction, temperature: 0.6 }
-        });
-        return response.text;
-    } catch (e) {
-        console.error("Failed to generate summary for image prompt:", e);
-        // Fallback to simpler description if summary fails
-        return `A ${project.description || 'steel structure'}.`;
-    }
-};
-
-export const generateProjectPreviewImage = async (project: Project): Promise<string> => {
-  try {
-    // Step 1: Generate a high-quality summary of the project's visual characteristics.
-    const summary = await _generateProjectSummaryForImage(project);
-
-    // Step 2: Use the summary to build a detailed and professional image generation prompt.
-    const prompt = `Photorealistic architectural rendering of ${summary}.
-    Style: cinematic, dramatic lighting, 8K resolution, Unreal Engine 5 render, professional CGI.
-    Materials: Emphasize brushed steel beams, polished concrete floors, and large glass panel walls.
-    Atmosphere: Clean, modern, professional, with a bright, clear sky in the background suitable for a corporate presentation.
-    Composition: A wide-angle shot showing the full structure from a dynamic, low-angle perspective.
-    Aspect Ratio: 16:9 widescreen.`;
-
-    const response = await ai.models.generateImages({
-        model: 'imagen-3.0-generate-002',
-        prompt: prompt,
+      let response = await getAi().models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Based on the system instructions, create the complete JSON object for the following steel structure: ${description}`,
         config: {
-          numberOfImages: 1,
-          outputMimeType: 'image/jpeg',
-          aspectRatio: '16:9',
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              modelCode: { type: Type.STRING, description: "A string of React component code using `React.createElement`. It must not contain any JSX syntax or import statements and must have a default export." },
+              billOfMaterials: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    component: { type: Type.STRING },
+                    quantity: { type: Type.INTEGER },
+                    estimatedMaterial: { type: Type.STRING },
+                  }
+                }
+              },
+              engineeringRationale: { type: Type.STRING, description: "A brief explanation of the design choices made." },
+            },
+            required: ["modelCode", "billOfMaterials", "engineeringRationale"],
+          },
         },
-    });
+      });
 
-    if (response.generatedImages && response.generatedImages.length > 0) {
-        const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-        return `data:image/jpeg;base64,${base64ImageBytes}`;
-    } else {
-        throw new Error('No image was generated by the API.');
+      let responseText = response.text.trim();
+      let parsedResponse;
+
+      try {
+          parsedResponse = JSON.parse(responseText);
+      } catch (e) {
+          console.error(`Attempt ${attempt}: JSON parsing failed.`, e);
+          throw new Error(`Invalid JSON response from AI: ${responseText}`);
+      }
+      
+      let { modelCode, billOfMaterials, engineeringRationale } = parsedResponse;
+      
+      if (!modelCode || !modelCode.includes('export default')) {
+           throw new Error("Generated code is missing a default export.");
+      }
+      
+      if (/<[a-zA-Z]/.test(modelCode)) { // Simple regex to detect potential JSX
+          throw new Error("Generated code appears to contain invalid JSX syntax.");
+      }
+
+      // **VALIDATION STEP**
+      try {
+        let url = 'data:text/javascript;base64,' + btoa(modelCode);
+        await import(/* @vite-ignore */ url);
+      } catch (e) {
+        console.error(`Attempt ${attempt}: Dynamic import validation failed.`, e);
+        throw new Error(`Generated code has a syntax error: ${e}`);
+      }
+
+      return { modelCode, billOfMaterials, engineeringRationale };
+
+    } catch (error) {
+      console.error(`Error on attempt ${attempt} of ${MAX_RETRIES}:`, error);
+      if (attempt === MAX_RETRIES) {
+        return {
+          modelCode: `// Generation Failed after ${MAX_RETRIES} attempts: ${error instanceof Error ? error.message : String(error)}`,
+          billOfMaterials: [],
+          engineeringRationale: `Failed to generate a valid model. The AI returned invalid data or code that could not be parsed or validated. Last error: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
     }
-  } catch (error) {
-    console.error("Error generating project preview image:", error);
-    if (error instanceof Error) {
-        return `Failed to generate image: ${error.message}`;
-    }
-    return "An unknown error occurred during image generation.";
   }
+
+  // This should not be reached, but is a fallback.
+  throw new Error("Model generation failed after all retries.");
 };
 
-const toolSystemInstructions = {
-  blender: `You are an expert in Blender's Python API (bpy). Generate a Python script that can be run directly in Blender's scripting environment. The script should be self-contained and perform the requested 3D modeling task. Do not include any explanations, just the raw Python code. Import the 'bpy' module where necessary.`,
-  threejs: `You are an expert in Three.js. Generate a JavaScript code snippet that creates and configures 3D objects as requested. Assume the code will run in an environment where 'THREE' is a global variable representing the Three.js library. The code should be self-contained and ready to be inserted into a Three.js scene setup. Do not include any HTML, setup code (like scene, camera, renderer), or explanations. Just provide the JavaScript code for the object creation and manipulation.`,
-  openscad: `You are an expert in OpenSCAD. Generate an OpenSCAD script to create the described model. The script should be concise, correct, and follow best practices for OpenSCAD modeling. Do not include any explanations or comments outside of the code itself. Just provide the raw OpenSCAD script.`,
-};
-
-
-export const generateScriptForTool = async (
-  prompt: string,
-  target: 'blender' | 'threejs' | 'openscad'
-): Promise<string> => {
-  try {
-    const systemInstruction = toolSystemInstructions[target];
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.2,
-        responseMimeType: 'text/plain',
-      },
-    });
-
-    let code = response.text;
-    code = code.replace(/^```(python|javascript|openscad|js)?\n/, '').replace(/```$/, '').trim();
-    return code;
-
-  } catch (error) {
-    console.error("Error generating script for tool:", error);
-    if (error instanceof Error) {
-        return `// Generation Failed: ${error.message}`;
-    }
-    return "// An unknown error occurred during script generation.";
-  }
-};
-
-export const generateModelFileContent = async (description: string, format: 'obj'): Promise<string> => {
+export async function generateProjectPreviewImage(project: Project): Promise<string> {
     try {
-        const systemInstruction = `You are an expert 3D modeler who specializes in generating 3D model file content from textual descriptions.
-Your task is to convert a detailed description of a steel structure into a valid, text-based 3D model file format.
+        let prompt = `Create a photorealistic, architectural concept rendering of the following steel structure project. The image should look like a professional marketing visual. Project details:
+        - Name: ${project.name}
+        - Description: ${project.description}
+        - Key Inputs: ${project.inputs.map(i => i.data).join(', ')}.
+        Style: Modern, clean, slightly overcast sky for soft lighting. Focus on the steel frame itself.`;
 
-RULES:
-1.  Your entire response must be ONLY the raw text content for the requested file format (e.g., the content of an .obj file).
-2.  DO NOT include any explanations, comments outside the file format's spec, or markdown formatting like \`\`\`obj.
-3.  For the 'obj' format, you must define vertices (v), and faces (f). You can optionally include vertex normals (vn) if it improves the output.
-4.  Ensure the model is manifold and has correct face winding order.
-5.  The model geometry should be reasonably scaled to fit within a 15x15x15 bounding box, centered around the origin.
-6.  Be precise and generate complex geometry that accurately reflects the description. Simple cubes are not acceptable for detailed descriptions.
-7.  The header of the file should contain a comment with the description. For OBJ it's '#'.
-
-Example for a simple cube:
-# A simple 1x1x1 cube.
-v -0.5 -0.5 -0.5
-v -0.5 -0.5 0.5
-v -0.5 0.5 -0.5
-v -0.5 0.5 0.5
-v 0.5 -0.5 -0.5
-v 0.5 -0.5 0.5
-v 0.5 0.5 0.7
-v 0.5 0.5 0.5
-f 1 3 4 2
-f 5 6 8 7
-f 1 5 7 3
-f 2 4 8 6
-f 1 2 6 5
-f 3 7 8 4
-`;
-
-        const userPrompt = `Generate the file content for the following request:
-Description: "${description}"
-Format: "${format}"
-
-File Content:`;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: userPrompt,
+        let response = await getAi().models.generateImages({
+            model: 'imagen-4.0-generate-001',
+            prompt,
             config: {
-                systemInstruction,
-                temperature: 0.3,
-                responseMimeType: 'text/plain',
-            }
+                numberOfImages: 1,
+                outputMimeType: 'image/png',
+                aspectRatio: '16:9',
+            },
         });
-
-        let fileContent = response.text.trim();
-        fileContent = fileContent.replace(/^```(obj)?\n/,'').replace(/```$/,'').trim();
         
-        // Basic validation for OBJ
-        if (format === 'obj' && (!fileContent.includes('v ') || !fileContent.includes('f '))) {
-          throw new Error('Generated OBJ content is invalid. Missing vertices or faces.');
-        }
-
-        return fileContent;
-
+        let base64ImageBytes = response.generatedImages[0].image.imageBytes;
+        return `data:image/png;base64,${base64ImageBytes}`;
     } catch (error) {
-        console.error("Error generating model file content:", error);
-        if (error instanceof Error) {
-            return `// Generation Failed: ${error.message}`;
-        }
-        return "// An unknown error occurred during file generation.";
+        console.error("Error generating project preview image:", error);
+        return error instanceof Error ? error.message : String(error);
     }
 };
 
-export const performStructuralAnalysis = async (modelDescription: string, analysisPrompt: string, systemPrompt?: string): Promise<StructuralAnalysisResult> => {
-    const systemInstruction = systemPrompt || `You are a seasoned structural engineer. Your task is to analyze a given steel structure based on its description and user-provided loading conditions. You must return a comprehensive analysis in a specific JSON format.
-
-The analysis should include:
-1.  A summary report in Markdown format.
-2.  A data table in CSV format, including key metrics like moments, forces, and deflections.
-3.  A concise, descriptive prompt for an image generation model to create a visual representation of the analysis (e.g., a stress contour plot or a bending moment diagram).
-
-You must return a single, valid JSON object that adheres to the provided schema.`;
-    
-    const userPrompt = `Please perform a structural analysis on the following model:
-
-**Model Description:**
-${modelDescription}
-
-**Analysis Prompt (Loads, Boundary Conditions, etc.):**
-${analysisPrompt}
-
-Provide the results in the requested JSON format.`;
-
-    const schema = {
-        type: Type.OBJECT,
-        properties: {
-            report: {
-                type: Type.STRING,
-                description: "A detailed structural analysis report in Markdown format. Include sections for assumptions, methodology, results, and conclusions/recommendations."
-            },
-            data: {
-                type: Type.STRING,
-                description: "A CSV-formatted string representing key analysis data. The first row must be the header. For example: 'Point,BendingMoment_kNm,ShearForce_kN,Deflection_mm'."
-            },
-            plotPrompt: {
-                type: Type.STRING,
-                description: "A clear, detailed prompt for a text-to-image AI to generate a visualization of the results. E.g., 'A finite element analysis (FEA) stress plot of a steel I-beam under uniform load, showing stress concentrations in red near the supports. The style should be a professional engineering diagram.'"
-            }
-        },
-        required: ["report", "data", "plotPrompt"]
-    };
-
-    try {
-        // Step 1: Generate the analysis text and the image prompt
-        const analysisResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: userPrompt,
-            config: {
-                systemInstruction,
-                temperature: 0.4,
-                responseMimeType: "application/json",
-                responseSchema: schema,
-            }
-        });
-
-        const jsonString = analysisResponse.text.trim().replace(/^```(json)?\n/, '').replace(/```$/, '').trim();
-        const analysisData = JSON.parse(jsonString);
-
-        if (!analysisData.report || !analysisData.data || !analysisData.plotPrompt) {
-            throw new Error('Analysis generation failed to return all required fields.');
-        }
-
-        // Step 2: Generate the visualization image using the prompt from Step 1
-        const imageResponse = await ai.models.generateImages({
-            model: 'imagen-3.0-generate-002',
-            prompt: analysisData.plotPrompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/png',
-                aspectRatio: '16:9',
-            },
-        });
-
-        if (!imageResponse.generatedImages || imageResponse.generatedImages.length === 0) {
-            throw new Error('Image generation failed for the analysis plot.');
-        }
-
-        const base64ImageBytes: string = imageResponse.generatedImages[0].image.imageBytes;
-        const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
-
-        return {
-            report: analysisData.report,
-            data: analysisData.data,
-            imageUrl: imageUrl,
-        };
-
-    } catch (error) {
-        console.error("Error performing structural analysis:", error);
-        if (error instanceof Error) {
-            throw new Error(`Analysis failed: ${error.message}`);
-        }
-        throw new Error("An unknown error occurred during structural analysis.");
-    }
+export async function generateModelFileContent(modelDescription: string, format: 'obj'): Promise<string> {
+  let prompt = `You are a file format generator. Based on the following technical description, create the complete text content for a 3D model file in the Wavefront OBJ (.obj) format.
+  
+  **Description:**
+  ${modelDescription}
+  
+  **Instructions:**
+  - Generate only the raw text content of the .obj file.
+  - Do not include any explanations, comments (unless they are valid OBJ comments starting with '#'), or markdown formatting.
+  - Define vertices (v), vertex normals (vn), faces (f), and object groups (o).
+  - Ensure the file is syntactically correct.
+  
+  Begin .obj file content now:`;
+  try {
+    let response = await getAi().models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+    });
+    return response.text;
+  } catch(e) {
+      console.error("Failed to generate OBJ file content", e);
+      return `// Generation Failed: ${e instanceof Error ? e.message : 'Unknown Error'}`;
+  }
 };
 
-export const performCfdAnalysis = async (modelDescription: string, analysisPrompt: string, systemPrompt?: string): Promise<CfdAnalysisResult> => {
-    const systemInstruction = systemPrompt || `You are a computational fluid dynamics (CFD) engineer. Your task is to perform a CFD analysis on a given structure based on its description and user-provided simulation parameters. You must return a comprehensive analysis in a specific JSON format.
+async function performAnalysis(
+    modelDescription: string, 
+    userPrompt: string, 
+    systemPrompt: string
+): Promise<StructuralAnalysisResult | CfdAnalysisResult> {
 
-The analysis should include:
-1.  A summary report in Markdown format, detailing the setup, methodology (e.g., turbulence model), and results.
-2.  A data table in CSV format, including key metrics like lift and drag coefficients, pressure coefficients at key points, etc.
-3.  A concise, descriptive prompt for an image generation model to create a visual representation of the fluid flow (e.g., streamlines, velocity contours, or pressure plots).
-
-You must return a single, valid JSON object that adheres to the provided schema.`;
-
-    const userPrompt = `Please perform a CFD analysis on the following model:
-
-**Model Description:**
-${modelDescription}
-
-**CFD Analysis Prompt (Flow conditions, models, etc.):**
-${analysisPrompt}
-
-Provide the results in the requested JSON format.`;
-
-    const schema = {
-        type: Type.OBJECT,
-        properties: {
-            report: {
-                type: Type.STRING,
-                description: "A detailed CFD analysis report in Markdown format. Include sections for mesh strategy, boundary conditions, turbulence model, results, and conclusions."
-            },
-            data: {
-                type: Type.STRING,
-                description: "A CSV-formatted string representing key CFD data. The first row must be the header. For example: 'Coefficient,Value,Unit\\nLiftCoefficient,1.2,-'."
-            },
-            plotPrompt: {
-                type: Type.STRING,
-                description: "A clear, detailed prompt for a text-to-image AI to generate a visualization of the CFD results. E.g., 'A CFD visualization of airflow over a building, showing areas of high velocity in yellow and low velocity in blue. The style should be a professional engineering diagram.'"
+    let response = await getAi().models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Model Description: "${modelDescription}". User analysis request: "${userPrompt}"`,
+        config: {
+            systemInstruction: systemPrompt,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    report: { type: Type.STRING, description: "A markdown-formatted summary of the analysis findings, methodology, and conclusions." },
+                    data: { type: Type.STRING, description: "A CSV-formatted string of the raw data. The first line must be the headers." },
+                    imageUrl: { type: Type.STRING, description: "A base64-encoded PNG data URL (e.g., 'data:image/png;base64,...') representing a plot of the results (e.g., stress plot, pressure map)." }
+                },
+                required: ['report', 'data', 'imageUrl']
             }
-        },
-        required: ["report", "data", "plotPrompt"]
-    };
+        }
+    });
 
     try {
-        // Step 1: Generate the CFD analysis text and the image prompt
-        const analysisResponse = await ai.models.generateContent({
+        let result = JSON.parse(response.text.trim());
+        // Basic validation
+        if (!result.imageUrl.startsWith('data:image/png;base64,')) {
+            throw new Error('AI did not return a valid data URL for the image.');
+        }
+        return result;
+    } catch(e) {
+        console.error("Failed to parse analysis result from AI.", e, "Raw response:", response.text);
+        throw new Error(`Failed to get a valid analysis from the AI. Raw response: ${response.text}`);
+    }
+}
+
+export async function performStructuralAnalysis(modelDescription: string, userPrompt: string): Promise<StructuralAnalysisResult> {
+    let systemPrompt = `You are an advanced structural analysis AI simulator that performs finite element analysis (FEA). Your task is to analyze a model based on its geometric description and user-defined conditions.
+
+**Chain of Thought Process:**
+1.  **Interpret & Setup:**
+    *   Parse the geometry from the model description.
+    *   Identify loads, constraints, and material properties from the user prompt. Assume standard S235 steel (Young's Modulus = 200 GPa, Poisson's Ratio = 0.3) if not specified.
+    *   State any assumptions made (e.g., "Assuming pinned supports at all column bases," "Assuming a 2D planar analysis for simplicity").
+    *   Briefly describe the conceptual mesh (e.g., "A fine tetrahedral mesh will be used around connection points").
+
+2.  **Simulate:**
+    *   Mentally perform the FEA simulation to calculate stress (von Mises), strain, and displacement fields.
+
+3.  **Generate Outputs (JSON Format):**
+    *   **report:** A concise markdown report detailing the setup, assumptions, key results (max stress, max deflection with location), and a conclusion on whether the design is adequate under the given loads.
+    *   **data:** A simple CSV table of critical data points. Include at least 5-10 points from high-stress or high-displacement areas (e.g., node_id,x,y,z,stress_MPa,displacement_mm).
+    *   **imageUrl:** A base64-encoded PNG data URL of a representative visual plot. This must be a color-mapped stress contour plot or a deflection diagram, clearly labeled with a color legend and units.`;
+    return performAnalysis(modelDescription, userPrompt, systemPrompt);
+};
+
+export async function performCfdAnalysis(modelDescription: string, userPrompt: string): Promise<CfdAnalysisResult> {
+    let systemPrompt = `You are a Computational Fluid Dynamics (CFD) AI simulator. Your task is to simulate fluid flow over a structure.
+    1.  **Interpret**: Understand the geometry from the model description and the flow conditions (velocity, fluid type) from the user prompt.
+    2.  **Simulate**: Mentally perform a CFD analysis, calculating pressure, velocity fields, and forces.
+    3.  **Generate Plot**: Create a visual plot (e.g., a pressure coefficient map or velocity streamlines). Encode this plot as a base64 PNG data URL.
+    4.  **Generate Report**: Write a concise markdown report explaining the simulation setup (mesh, turbulence model), key results (lift/drag coefficients), and conclusions.
+    5.  **Generate Data**: Create a simple CSV table of relevant data (e.g., surface_point, pressure_coefficient).
+    6.  **Output**: Return these three items in the specified JSON format.`;
+    return performAnalysis(modelDescription, userPrompt, systemPrompt);
+};
+
+export async function generateScriptForTool(prompt: string, target: 'blender' | 'threejs' | 'openscad'): Promise<string> {
+    let languageMap = { blender: 'Python', threejs: 'JavaScript', openscad: 'OpenSCAD script' };
+    let systemPrompt = `You are an expert code generator for 3D software. Your task is to write a clean, efficient, and fully functional script in ${languageMap[target]} based on the user's prompt.
+    - The script must be self-contained and ready to run.
+    - Do not include any explanations, markdown, or text outside of the code itself.
+    - For Blender, use the bpy library. For Three.js, assume a standard scene setup.
+    - Your entire response should be only the raw code.`;
+
+    try {
+        let response = await getAi().models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: userPrompt,
+            contents: `Generate a ${languageMap[target]} script for the following request: "${prompt}"`,
             config: {
-                systemInstruction,
-                temperature: 0.4,
-                responseMimeType: "application/json",
-                responseSchema: schema,
+                systemInstruction: systemPrompt,
+                temperature: 0.2,
             }
         });
-
-        const jsonString = analysisResponse.text.trim().replace(/^```(json)?\n/, '').replace(/```$/, '').trim();
-        const analysisData = JSON.parse(jsonString);
-
-        if (!analysisData.report || !analysisData.data || !analysisData.plotPrompt) {
-            throw new Error('CFD analysis generation failed to return all required fields.');
-        }
-
-        // Step 2: Generate the visualization image using the prompt from Step 1
-        const imageResponse = await ai.models.generateImages({
-            model: 'imagen-3.0-generate-002',
-            prompt: analysisData.plotPrompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/png',
-                aspectRatio: '16:9',
-            },
-        });
-
-        if (!imageResponse.generatedImages || imageResponse.generatedImages.length === 0) {
-            throw new Error('Image generation failed for the CFD plot.');
-        }
-
-        const base64ImageBytes: string = imageResponse.generatedImages[0].image.imageBytes;
-        const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
-
-        return {
-            report: analysisData.report,
-            data: analysisData.data,
-            imageUrl: imageUrl,
-        };
-
-    } catch (error) {
-        console.error("Error performing CFD analysis:", error);
-        if (error instanceof Error) {
-            throw new Error(`CFD analysis failed: ${error.message}`);
-        }
-        throw new Error("An unknown error occurred during CFD analysis.");
+        return response.text.replace(/```[\w\s]*\n|```/g, '').trim(); // Clean up potential markdown fences
+    } catch(e) {
+        console.error(`Failed to generate script for ${target}`, e);
+        return `// Generation Failed: ${e instanceof Error ? e.message : 'Unknown Error'}`;
     }
 };

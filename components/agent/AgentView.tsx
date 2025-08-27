@@ -7,22 +7,22 @@ import { Card } from '../common/Card';
 import { AgentPersona } from '../../types';
 import { PersonaEditorModal } from './PersonaEditorModal';
 
-export const AgentView: React.FC = () => {
+export function AgentView(): React.ReactElement {
     const { personas, activePersonaId, setActivePersonaId, deletePersona } = useAgent();
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [editingPersona, setEditingPersona] = useState<AgentPersona | null>(null);
 
-    const handleCreate = () => {
+    function handleCreate() {
         setEditingPersona(null);
         setIsEditorOpen(true);
-    };
+    }
 
-    const handleEdit = (persona: AgentPersona) => {
+    function handleEdit(persona: AgentPersona) {
         setEditingPersona(persona);
         setIsEditorOpen(true);
-    };
+    }
     
-    const handleDuplicate = (persona: AgentPersona) => {
+    function handleDuplicate(persona: AgentPersona) {
         setEditingPersona({
             ...persona,
             id: '', // Clear ID to indicate duplication
@@ -30,13 +30,13 @@ export const AgentView: React.FC = () => {
             isPreset: false,
         });
         setIsEditorOpen(true);
-    };
+    }
 
-    const handleDelete = (persona: AgentPersona) => {
+    function handleDelete(persona: AgentPersona) {
         if (!persona.isPreset && window.confirm(`Are you sure you want to delete the "${persona.name}" persona?`)) {
             deletePersona(persona.id);
         }
-    };
+    }
 
     return (
         <div className="container mx-auto py-8 px-4">

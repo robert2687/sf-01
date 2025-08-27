@@ -12,29 +12,29 @@ import { DocsView } from './components/DocsView';
 
 type View = 'projects' | 'marketplace' | 'agent' | 'guides';
 
-const App: React.FC = () => {
+function App(): React.ReactElement {
   const [currentView, setCurrentView] = useState<View>('projects');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const handleNavigate = (view: View) => {
+  function handleNavigate(view: View) {
     setCurrentView(view);
     // When navigating away, always clear the selected project
     setSelectedProjectId(null);
-  };
+  }
 
-  const handleSelectProject = (id: string) => {
+  function handleSelectProject(id: string) {
     setCurrentView('projects'); // Ensure we are on the projects view
     setSelectedProjectId(id);
-  };
+  }
 
-  const handleBackToProjects = () => {
+  function handleBackToProjects() {
     setSelectedProjectId(null);
-  };
+  }
 
-  const renderContent = () => {
+  function renderContent() {
     switch (currentView) {
       case 'marketplace':
-        return <Marketplace />;
+        return <Marketplace onNavigateToProject={handleSelectProject} />;
       case 'agent':
         return <AgentView />;
       case 'guides':
@@ -46,7 +46,7 @@ const App: React.FC = () => {
         }
         return <ProjectList onSelectProject={handleSelectProject} />;
     }
-  };
+  }
 
   return (
     <ProjectProvider>

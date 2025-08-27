@@ -1,7 +1,7 @@
 
 
 import React from 'react';
-import { ModelOutput, ModelStatus } from '../types';
+import { ModelOutput, ModelStatus, getModelStatus } from '../types';
 import { Card } from './common/Card';
 import { Button } from './common/Button';
 import { Spinner } from './common/Spinner';
@@ -13,7 +13,8 @@ interface ModelCardProps {
   activeTaskName?: string;
 }
 
-const StatusBadge: React.FC<{ status: ModelStatus }> = ({ status }) => {
+function StatusBadge({ status }: { status: ModelStatus }): React.ReactElement {
+  const ModelStatus = getModelStatus();
   const statusStyles = {
     [ModelStatus.PENDING]: 'bg-yellow-600/50 text-yellow-300',
     [ModelStatus.GENERATING]: 'bg-blue-600/50 text-blue-300 animate-pulse',
@@ -27,7 +28,8 @@ const StatusBadge: React.FC<{ status: ModelStatus }> = ({ status }) => {
   );
 };
 
-export const ModelCard: React.FC<ModelCardProps> = ({ model, onView, activeTaskName }) => {
+export function ModelCard({ model, onView, activeTaskName }: ModelCardProps): React.ReactElement {
+  const ModelStatus = getModelStatus();
   const isProcessing = model.status === ModelStatus.PENDING || model.status === ModelStatus.GENERATING;
 
   const processingText = activeTaskName ? (

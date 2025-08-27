@@ -11,7 +11,7 @@ interface PersonaEditorModalProps {
     persona: AgentPersona | null;
 }
 
-export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, onClose, persona }) => {
+export function PersonaEditorModal({ isOpen, onClose, persona }: PersonaEditorModalProps): React.ReactElement {
     const { addPersona, updatePersona } = useAgent();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
@@ -33,7 +33,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
         }
     }, [persona, isOpen]);
 
-    const handleSubmit = () => {
+    function handleSubmit() {
         const personaData = { name, description, systemPrompt };
         if (isEditing) {
             updatePersona(persona!.id, personaData);
@@ -41,7 +41,7 @@ export const PersonaEditorModal: React.FC<PersonaEditorModalProps> = ({ isOpen, 
             addPersona(personaData);
         }
         onClose();
-    };
+    }
 
     const modalTitle = isEditing ? "Edit Persona" : (isDuplicating ? "Duplicate Persona" : "Create New Persona");
 

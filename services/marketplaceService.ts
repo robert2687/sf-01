@@ -1,8 +1,14 @@
-
 import { MarketplaceComponent } from '../types';
 
-// Simple model code for a single beam
-const beamModelCode = `
+let marketplaceComponents: MarketplaceComponent[] | null = null;
+
+function getComponents(): MarketplaceComponent[] {
+    if (marketplaceComponents) {
+        return marketplaceComponents;
+    }
+
+    // Simple model code for a single beam
+    let beamModelCode = `
 export default function BeamComponent({ props }) {
   const React = window.React;
   const Drei = window.ReactThreeDrei;
@@ -18,8 +24,8 @@ export default function BeamComponent({ props }) {
 }
 `;
 
-// Simple model code for a truss
-const trussModelCode = `
+    // Simple model code for a truss
+    let trussModelCode = `
 export default function TrussComponent({ props }) {
     const React = window.React;
     const Drei = window.ReactThreeDrei;
@@ -45,26 +51,29 @@ export default function TrussComponent({ props }) {
 }
 `;
 
-export const marketplaceComponents: MarketplaceComponent[] = [
-  {
-    id: 'comp-truss-01',
-    name: 'Standard Warren Truss',
-    description: 'A 10-meter long standard Warren-style truss. Ideal for roofing and bridge applications. Parametric adjustments not yet supported.',
-    category: 'Trusses',
-    previewImageUrl: 'https://storage.googleapis.com/maker-suite-guides/steel-forge/truss.png',
-    modelCode: trussModelCode,
-  },
-  {
-    id: 'comp-beam-01',
-    name: '8m I-Beam',
-    description: 'An 8-meter long standard structural I-beam component. Can be used as a column or rafter.',
-    category: 'Beams',
-    previewImageUrl: 'https://storage.googleapis.com/maker-suite-guides/steel-forge/beam.png',
-    modelCode: beamModelCode,
-  },
-];
+    marketplaceComponents = [
+      {
+        id: 'comp-truss-01',
+        name: 'Standard Warren Truss',
+        description: 'A 10-meter long standard Warren-style truss. Ideal for roofing and bridge applications. Parametric adjustments not yet supported.',
+        category: 'Trusses',
+        previewImageUrl: 'https://storage.googleapis.com/maker-suite-guides/steel-forge/truss.png',
+        modelCode: trussModelCode,
+      },
+      {
+        id: 'comp-beam-01',
+        name: '8m I-Beam',
+        description: 'An 8-meter long standard structural I-beam component. Can be used as a column or rafter.',
+        category: 'Beams',
+        previewImageUrl: 'https://storage.googleapis.com/maker-suite-guides/steel-forge/beam.png',
+        modelCode: beamModelCode,
+      },
+    ];
+    
+    return marketplaceComponents;
+}
 
-export const getMarketplaceComponents = async (): Promise<MarketplaceComponent[]> => {
+export async function getMarketplaceComponents(): Promise<MarketplaceComponent[]> {
   // In a real app, this would be a network request
-  return Promise.resolve(marketplaceComponents);
+  return Promise.resolve(getComponents());
 };

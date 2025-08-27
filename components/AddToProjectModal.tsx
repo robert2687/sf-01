@@ -11,15 +11,15 @@ interface AddToProjectModalProps {
   componentName: string;
 }
 
-export const AddToProjectModal: React.FC<AddToProjectModalProps> = ({ isOpen, onClose, onConfirm, componentName }) => {
+export function AddToProjectModal({ isOpen, onClose, onConfirm, componentName }: AddToProjectModalProps): React.ReactElement {
   const { projects } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects.length > 0 ? projects[0].id : '');
 
-  const handleSubmit = () => {
+  function handleSubmit() {
     if (selectedProjectId) {
       onConfirm(selectedProjectId);
     }
-  };
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Add "${componentName}" to Project`}>

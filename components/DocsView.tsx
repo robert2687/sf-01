@@ -1,18 +1,22 @@
 
 import React from 'react';
 
-const Section: React.FC<{title: string, children: React.ReactNode}> = ({title, children}) => (
-    <div className="bg-secondary p-6 rounded-lg shadow-lg mb-8">
-        <h2 className="text-2xl font-bold text-highlight mb-4 border-b-2 border-gray-700 pb-2">{title}</h2>
-        <div className="prose prose-invert prose-p:text-muted prose-li:text-muted prose-a:text-accent prose-strong:text-light prose-headings:text-light max-w-none space-y-4">{children}</div>
-    </div>
-);
+function Section({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
+    return (
+        <div className="bg-secondary p-6 rounded-lg shadow-lg mb-8">
+            <h2 className="text-2xl font-bold text-highlight mb-4 border-b-2 border-gray-700 pb-2">{title}</h2>
+            <div className="prose prose-invert prose-p:text-muted prose-li:text-muted prose-a:text-accent prose-strong:text-light prose-headings:text-light max-w-none space-y-4">{children}</div>
+        </div>
+    );
+}
 
-const CodeBlock: React.FC<{ language: string, children: string }> = ({ language, children }) => (
-    <pre className="bg-primary p-4 rounded-md overflow-x-auto"><code className={`language-${language}`}>{children.trim()}</code></pre>
-);
+function CodeBlock({ language, children }: { language: string; children: string }): React.ReactElement {
+    return (
+        <pre className="bg-primary p-4 rounded-md overflow-x-auto"><code className={`language-${language}`}>{children.trim()}</code></pre>
+    );
+}
 
-export const DocsView: React.FC = () => {
+export function DocsView(): React.ReactElement {
     return (
         <div className="container mx-auto py-8 px-4">
             <div className="text-center mb-12">
@@ -295,4 +299,4 @@ Generate three design variations of a support scaffold for a 5,000-liter cylindr
             </Section>
         </div>
     );
-};
+}

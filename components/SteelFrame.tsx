@@ -7,7 +7,7 @@ import { useMemo } from 'react';
 
 // This component is a placeholder to visualize a structure.
 // In a real application, this would be replaced by the loaded 3D model.
-export const SteelFrame: React.FC = () => {
+export function SteelFrame(): React.ReactElement | null {
     const THREE = (window as any).THREE;
     const Drei = (window as any).ReactThreeDrei;
 

@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect } from 'react';
-import { DesignInputType } from '../types';
+import { DesignInputType, getDesignInputType } from '../types';
 import { useProjects } from '../context/ProjectContext';
 import { Button } from './common/Button';
 import { FileTextIcon, ImageIcon, DxfFileIcon } from './icons';
@@ -10,8 +10,9 @@ interface InputFormProps {
   projectId: string;
 }
 
-export const InputForm: React.FC<InputFormProps> = ({ projectId }) => {
+export function InputForm({ projectId }: InputFormProps): React.ReactElement {
   const { addInputToProject } = useProjects();
+  const DesignInputType = getDesignInputType();
   const [inputType, setInputType] = useState<DesignInputType>(DesignInputType.TEXT);
   const [textData, setTextData] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -26,7 +27,7 @@ export const InputForm: React.FC<InputFormProps> = ({ projectId }) => {
     setError('');
   }, [inputType]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
 
@@ -56,9 +57,9 @@ export const InputForm: React.FC<InputFormProps> = ({ projectId }) => {
     } else if (inputType === DesignInputType.DXF) {
       reader.readAsText(selectedFile);
     }
-  };
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (inputType === DesignInputType.TEXT && textData.trim()) {
       addInputToProject(projectId, { type: DesignInputType.TEXT, data: textData });
@@ -74,7 +75,7 @@ export const InputForm: React.FC<InputFormProps> = ({ projectId }) => {
     } else {
         setError('Please provide a valid input.');
     }
-  };
+  }
 
   return (
     <div className="bg-gray-800 p-4 rounded-lg">

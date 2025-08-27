@@ -1,12 +1,11 @@
 
-
 import React from 'react';
 
 interface SpinnerProps {
     size?: 'sm' | 'md' | 'lg';
 }
 
-export const Spinner: React.FC<SpinnerProps> = ({ size = 'md' }) => {
+export function Spinner({ size = 'md' }: SpinnerProps): React.ReactElement {
     const sizeClasses = {
         sm: 'h-6 w-6',
         md: 'h-8 w-8',

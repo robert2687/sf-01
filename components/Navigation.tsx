@@ -9,12 +9,14 @@ interface NavigationProps {
   onNavigate: (view: View) => void;
 }
 
-const NavButton: React.FC<{
+interface NavButtonProps {
   icon: React.ReactNode;
   label: string;
   isActive: boolean;
   onClick: () => void;
-}> = ({ icon, label, isActive, onClick }) => {
+}
+
+function NavButton({ icon, label, isActive, onClick }: NavButtonProps): React.ReactElement {
   const baseClasses = "flex items-center space-x-2 px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200";
   const activeClasses = "bg-accent text-white";
   const inactiveClasses = "text-muted hover:bg-secondary hover:text-light";
@@ -31,7 +33,7 @@ const NavButton: React.FC<{
 };
 
 
-export const Navigation: React.FC<NavigationProps> = ({ currentView, onNavigate }) => {
+export function Navigation({ currentView, onNavigate }: NavigationProps): React.ReactElement {
   return (
     <nav className="bg-primary border-b border-secondary">
       <div className="container mx-auto px-4">

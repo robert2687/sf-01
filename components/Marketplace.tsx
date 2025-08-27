@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { getMarketplaceComponents } from '../services/marketplaceService';
-import { MarketplaceComponent, ModelStatus, ModelOutput } from '../types';
+import { MarketplaceComponent, ModelOutput, getModelStatus } from '../types';
 import { useProjects } from '../context/ProjectContext';
 import { Card } from './common/Card';
 import { Button } from './common/Button';
@@ -9,28 +10,33 @@ import { Spinner } from './common/Spinner';
 import { AddToProjectModal } from './AddToProjectModal';
 import { CheckCircleIcon, PlusIcon } from './icons';
 
-export const Marketplace: React.FC = () => {
+interface MarketplaceProps {
+  onNavigateToProject: (projectId: string) => void;
+}
+
+export function Marketplace({ onNavigateToProject }: MarketplaceProps): React.ReactElement {
   const { addModelToProject } = useProjects();
   const [components, setComponents] = useState<MarketplaceComponent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedComponent, setSelectedComponent] = useState<MarketplaceComponent | null>(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [addedInfo, setAddedInfo] = useState<{ projectId: string, componentName: string } | null>(null);
+  const ModelStatus = getModelStatus();
 
   useEffect(() => {
-    const fetchComponents = async () => {
+    async function fetchComponents() {
       setIsLoading(true);
       const fetchedComponents = await getMarketplaceComponents();
       setComponents(fetchedComponents);
       setIsLoading(false);
-    };
+    }
     fetchComponents();
   }, []);
 
-  const handleOpenModal = (component: MarketplaceComponent) => {
+  function handleOpenModal(component: MarketplaceComponent) {
     setSelectedComponent(component);
-  };
+  }
 
-  const handleConfirmAdd = (projectId: string) => {
+  function handleConfirmAdd(projectId: string) {
     if (selectedComponent) {
       const newModel: Omit<ModelOutput, 'id'> = {
         projectId,
@@ -42,11 +48,11 @@ export const Marketplace: React.FC = () => {
         billOfMaterials: [], // Marketplace items don't have BOMs in this version
       };
       addModelToProject(projectId, newModel);
+      setAddedInfo({ projectId, componentName: selectedComponent.name });
       setSelectedComponent(null);
-      setShowConfirmation(true);
-      setTimeout(() => setShowConfirmation(false), 3000);
+      setTimeout(() => setAddedInfo(null), 5000);
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -60,10 +66,16 @@ export const Marketplace: React.FC = () => {
     <div className="container mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-3xl font-bold">Component Marketplace</h2>
-        {showConfirmation && (
-            <div className="flex items-center space-x-2 text-green-400">
+        {addedInfo && (
+            <div className="flex items-center space-x-2 text-green-400 bg-secondary p-3 rounded-md shadow-lg animate-fade-in-up">
                 <CheckCircleIcon className="w-6 h-6" />
-                <span>Component added to project!</span>
+                <span className="font-medium">"{addedInfo.componentName}" added!</span>
+                <Button 
+                  variant="secondary" 
+                  className="ml-4 !text-xs !py-1 !px-3" 
+                  onClick={() => onNavigateToProject(addedInfo.projectId)}>
+                    Go to Project
+                </Button>
             </div>
         )}
       </div>

@@ -1,1 +1,0 @@
-// This file is deprecated. Its contents have been merged into 'types.ts' at the root directory to resolve structural conflicts.

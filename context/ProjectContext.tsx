@@ -1,44 +1,46 @@
 
-import React, { createContext, useState, useCallback, useContext, ReactNode, useEffect } from 'react';
-import { Project, DesignInput, ModelOutput, ModelStatus, DesignInputType, ExecutionPlan, Task } from '../types';
 
-interface ProjectContextType {
-  projects: Project[];
-  addProject: (name: string, description: string) => void;
-  getProjectById: (id: string) => Project | undefined;
-  addInputToProject: (projectId: string, input: Omit<DesignInput, 'id'>) => void;
-  addModelToProject: (projectId: string, model: Omit<ModelOutput, 'id'>) => string;
-  updateModel: (projectId: string, modelId: string, updates: Partial<ModelOutput>) => void;
-  updateProject: (projectId: string, updates: Partial<Project>) => void;
-  getInputsByIds: (projectId: string, inputIds: string[]) => DesignInput[];
-  addPlanToProject: (projectId: string, plan: ExecutionPlan) => void;
-  updatePlan: (projectId: string, planId: string, updates: Partial<ExecutionPlan>) => void;
-  updateTaskInPlan: (projectId: string, planId: string, taskId: string, updates: Partial<Task>) => void;
+import React, { createContext, useState, useCallback, useContext, ReactNode, useEffect } from 'react';
+import { Project, DesignInput, ModelOutput, ExecutionPlan, Task, ProjectContextType, getDesignInputType } from '../types';
+
+let projectContextInstance: React.Context<ProjectContextType | undefined> | null = null;
+
+function getProjectContext(): React.Context<ProjectContextType | undefined> {
+    if (!projectContextInstance) {
+        projectContextInstance = createContext<ProjectContextType | undefined>(undefined);
+    }
+    return projectContextInstance;
 }
 
-const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
-
-const LOCAL_STORAGE_KEY = 'steelForgeAI_projects';
-
-const initialProjects: Project[] = [
-    {
-        id: 'proj-1',
-        name: 'Workshop Concept',
-        description: 'A 20x15m steel framed workshop for light industrial use.',
-        createdAt: new Date().toISOString(),
-        inputs: [
-            { id: 'input-1', type: DesignInputType.TEXT, data: 'A 20m wide by 15m deep steel portal frame warehouse with a 10-degree gable roof. Eave height should be 6m. Include one large roller door on the front gable end.' }
-        ],
-        models: [],
-        plans: [],
+let _project_local_storage_key: string | null = null;
+function getProjectLocalStorageKey(): string {
+    if (!_project_local_storage_key) {
+        _project_local_storage_key = 'steelForgeAI_projects';
     }
-];
+    return _project_local_storage_key;
+}
 
+function getInitialProjects(): Project[] {
+    const DesignInputType = getDesignInputType();
+    return [
+        {
+            id: 'proj-1',
+            name: 'Workshop Concept',
+            description: 'A 20x15m steel framed workshop for light industrial use.',
+            createdAt: new Date().toISOString(),
+            inputs: [
+                { id: 'input-1', type: DesignInputType.TEXT, data: 'A 20m wide by 15m deep steel portal frame warehouse with a 10-degree gable roof. Eave height should be 6m. Include one large roller door on the front gable end.' }
+            ],
+            models: [],
+            plans: [],
+        }
+    ];
+}
 
-export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export function ProjectProvider({ children }: { children: ReactNode }): React.ReactElement {
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
-        const storedProjects = window.localStorage.getItem(LOCAL_STORAGE_KEY);
+        const storedProjects = window.localStorage.getItem(getProjectLocalStorageKey());
         if (storedProjects) {
             // A simple migration: If a stored project doesn't have a 'plans' array, add it.
             const parsedProjects = JSON.parse(storedProjects);
@@ -47,12 +49,12 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     } catch (error) {
         console.error("Failed to parse projects from localStorage", error);
     }
-    return initialProjects;
+    return getInitialProjects();
   });
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projects));
+      window.localStorage.setItem(getProjectLocalStorageKey(), JSON.stringify(projects));
     } catch (error) {
       console.error("Failed to save projects to localStorage", error);
     }
@@ -165,14 +167,16 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 
   const value = { projects, addProject, getProjectById, addInputToProject, addModelToProject, updateModel, getInputsByIds, updateProject, addPlanToProject, updatePlan, updateTaskInPlan };
-
+  
+  const ProjectContext = getProjectContext();
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 };
 
-export const useProjects = (): ProjectContextType => {
+export function useProjects(): ProjectContextType {
+  const ProjectContext = getProjectContext();
   const context = useContext(ProjectContext);
   if (context === undefined) {
     throw new Error('useProjects must be used within a ProjectProvider');
   }
   return context;
-};
+}

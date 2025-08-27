@@ -9,24 +9,37 @@ import { ClipboardIcon, CheckIcon } from './icons';
 
 type Target = 'blender' | 'threejs' | 'openscad';
 
-const targetLanguageMap: Record<Target, string> = {
-    blender: 'python',
-    threejs: 'javascript',
-    openscad: 'scad',
-};
-
-const targetNameMap: Record<Target, string> = {
-    blender: 'Blender',
-    threejs: 'Three.js',
-    openscad: 'OpenSCAD',
-};
-
 interface CodeGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({ isOpen, onClose }) => {
+// Lazy-initialized maps to avoid top-level const object errors.
+let _targetLanguageMap: Record<Target, string> | null = null;
+function getTargetLanguageMap(): Record<Target, string> {
+    if (!_targetLanguageMap) {
+        _targetLanguageMap = Object.freeze({
+            blender: 'python',
+            threejs: 'javascript',
+            openscad: 'scad',
+        });
+    }
+    return _targetLanguageMap;
+}
+
+let _targetNameMap: Record<Target, string> | null = null;
+function getTargetNameMap(): Record<Target, string> {
+    if (!_targetNameMap) {
+        _targetNameMap = Object.freeze({
+            blender: 'Blender',
+            threejs: 'Three.js',
+            openscad: 'OpenSCAD',
+        });
+    }
+    return _targetNameMap;
+}
+
+export function CodeGeneratorModal({ isOpen, onClose }: CodeGeneratorModalProps): React.ReactElement {
     const [target, setTarget] = useState<Target>('blender');
     const [prompt, setPrompt] = useState('');
     const [generatedCode, setGeneratedCode] = useState('');
@@ -46,6 +59,8 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({ isOpen, 
         if (isLoading) {
             let i = 0;
             const updateMessage = () => {
+                 const targetLanguageMap = getTargetLanguageMap();
+                 const targetNameMap = getTargetNameMap();
                  const lang = targetLanguageMap[target];
                  const targetName = targetNameMap[target];
                  const msg = codeGenerationMessages[i]
@@ -60,7 +75,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({ isOpen, 
         return () => clearInterval(interval);
     }, [isLoading, target]);
 
-    const handleGenerate = async () => {
+    async function handleGenerate() {
         if (!prompt.trim()) {
             setError('Please enter a prompt.');
             return;
@@ -82,17 +97,17 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({ isOpen, 
         } finally {
             setIsLoading(false);
         }
-    };
+    }
 
-    const handleCopy = () => {
+    function handleCopy() {
         if (generatedCode) {
             navigator.clipboard.writeText(generatedCode);
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
-    };
+    }
 
-    const resetStateAndClose = () => {
+    function resetStateAndClose() {
         setTarget('blender');
         setPrompt('');
         setGeneratedCode('');
@@ -157,7 +172,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({ isOpen, 
                                         {copied ? <CheckIcon className="w-5 h-5 text-green-400" /> : <ClipboardIcon className="w-5 h-5" />}
                                     </button>
                                     <pre className="max-h-96 overflow-auto">
-                                        <code className={`language-${targetLanguageMap[target]}`}>
+                                        <code className={`language-${getTargetLanguageMap()[target]}`}>
                                             {generatedCode}
                                         </code>
                                     </pre>

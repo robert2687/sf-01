@@ -1,9 +1,8 @@
 
-
 import React from 'react';
 import { CubeIcon } from './icons';
 
-export const Header: React.FC = () => {
+export function Header(): React.ReactElement {
   return (
     <header className="bg-secondary p-4 shadow-md sticky top-0 z-40">
       <div className="container mx-auto flex items-center">

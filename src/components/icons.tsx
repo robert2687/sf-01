@@ -1,1 +1,0 @@
-// This file is deprecated. Its contents have been merged into the version at '/components/icons.tsx' to resolve structural conflicts.

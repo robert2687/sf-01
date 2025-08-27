@@ -1,10 +1,8 @@
-
-import { ExecutionPlan, Task, TaskStatus, ModelStatus } from '../types';
-import { Tools } from './tools';
+import { ExecutionPlan, Task, getTaskStatus, getModelStatus, ProjectContextType } from '../types';
+import { getTools } from './tools';
 import { generateModelDescription, generateModelData } from '../services/geminiService';
-import { useProjects } from '../context/ProjectContext';
 
-type AgentContext = ReturnType<typeof useProjects>;
+type AgentContext = ProjectContextType;
 
 /**
  * Creates an execution plan for the AI agent based on a high-level goal.
@@ -14,9 +12,11 @@ type AgentContext = ReturnType<typeof useProjects>;
  * @returns An ExecutionPlan object.
  */
 export function createExecutionPlan(goal: 'generate' | 'refine', args: any, systemPrompt?: string): ExecutionPlan {
-    const planId = `plan-${Date.now()}`;
+    let planId = `plan-${Date.now()}`;
     let tasks: Task[] = [];
     let planGoal: string = '';
+    let Tools = getTools(); // Use the lazy getter
+    let TaskStatus = getTaskStatus();
 
     if (goal === 'generate') {
         planGoal = "Create a new 3D model from selected inputs.";
@@ -79,37 +79,40 @@ export function createExecutionPlan(goal: 'generate' | 'refine', args: any, syst
  * @param context The project context for state manipulation.
  */
 export async function executePlan(plan: ExecutionPlan, projectId: string, context: AgentContext) {
-    const { getInputsByIds, updateModel, updateTaskInPlan, updatePlan } = context;
+    let { getInputsByIds, updateModel, updateTaskInPlan, updatePlan } = context;
+    let TaskStatus = getTaskStatus();
+    let ModelStatus = getModelStatus();
 
     if (!plan.modelId) {
         console.error("Plan cannot be executed without a modelId.");
         await updatePlan(projectId, plan.id, { status: TaskStatus.FAILED });
         return;
     }
-    const modelId = plan.modelId;
+    let modelId = plan.modelId;
 
     await updatePlan(projectId, plan.id, { status: TaskStatus.IN_PROGRESS });
 
     let previousTaskResult: any = null;
 
-    for (const task of plan.tasks) {
+    for (let i = 0; i < plan.tasks.length; i++) {
+        let task = plan.tasks[i];
         try {
             await updateTaskInPlan(projectId, plan.id, task.id, { status: TaskStatus.IN_PROGRESS, startedAt: new Date().toISOString() });
             let currentTaskResult: any;
 
             if (task.name.includes("Description") || task.name.includes("Brief")) {
-                const inputs = getInputsByIds(projectId, task.arguments.inputIds);
-                const description = await generateModelDescription(inputs, task.arguments.refinementText, plan.systemPrompt);
+                let inputs = getInputsByIds(projectId, task.arguments.inputIds);
+                let description = await generateModelDescription(inputs, task.arguments.refinementText, plan.systemPrompt);
                 if (description.startsWith('Failed')) throw new Error(description);
                 
                 currentTaskResult = description;
                 await updateModel(projectId, modelId, { description: description, status: ModelStatus.GENERATING });
 
             } else if (task.name.includes("Code & BOM") || task.name.includes("Geometry & Materials")) {
-                const description = previousTaskResult;
+                let description = previousTaskResult;
                 if (!description) throw new Error("Description from previous step was not available.");
                 
-                const { modelCode, billOfMaterials, engineeringRationale } = await generateModelData(description, plan.systemPrompt);
+                let { modelCode, billOfMaterials, engineeringRationale } = await generateModelData(description, plan.systemPrompt);
 
                 currentTaskResult = { modelCode, billOfMaterials, engineeringRationale };
                 await updateModel(projectId, modelId, { 
@@ -124,7 +127,7 @@ export async function executePlan(plan: ExecutionPlan, projectId: string, contex
             await updateTaskInPlan(projectId, plan.id, task.id, { status: TaskStatus.COMPLETED, result: currentTaskResult, completedAt: new Date().toISOString() });
         } catch (error: any) {
             console.error(`Task "${task.name}" failed:`, error);
-            const errorMessage = error instanceof Error ? error.message : String(error);
+            let errorMessage = error instanceof Error ? error.message : String(error);
             await updateTaskInPlan(projectId, plan.id, task.id, { status: TaskStatus.FAILED, error: errorMessage, completedAt: new Date().toISOString() });
             await updatePlan(projectId, plan.id, { status: TaskStatus.FAILED });
             await updateModel(projectId, modelId, { status: ModelStatus.FAILED, failureReason: `Task "${task.name}" failed: ${errorMessage}` });

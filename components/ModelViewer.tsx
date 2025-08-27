@@ -1,13 +1,14 @@
 
+
 import React, { Suspense, useState, useEffect, useMemo } from 'react';
 // Canvas and Drei are now sourced from window globals to ensure a single instance.
 // import { Canvas } from '@react-three/fiber';
 // import * as Drei from '@react-three/drei';
-import { ModelOutput, DesignInput, StructuralAnalysisResult, CfdAnalysisResult } from '../types';
+import { ModelOutput, DesignInput, StructuralAnalysisResult, CfdAnalysisResult, ModelStatus, getModelStatus } from '../types';
 import { SteelFrame } from './SteelFrame';
 import { Spinner } from './common/Spinner';
 import { Button } from './common/Button';
-import { DownloadIcon, MicrophoneIcon, SparklesIcon, WindIcon } from './icons';
+import { DownloadIcon, MicrophoneIcon, SparklesIcon, WindIcon, XCircleIcon } from './icons';
 import { generateModelFileContent, performStructuralAnalysis, performCfdAnalysis } from '../services/geminiService';
 
 interface ModelViewerProps {
@@ -17,7 +18,7 @@ interface ModelViewerProps {
   isLoadingRefinement: boolean;
 }
 
-const DynamicModel: React.FC<{ code: string }> = ({ code }) => {
+function DynamicModel({ code }: { code: string }): React.ReactElement | null {
     const [Component, setComponent] = useState<React.ComponentType | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -26,28 +27,28 @@ const DynamicModel: React.FC<{ code: string }> = ({ code }) => {
         setComponent(null);
         setError(null);
 
-        if (!code || code.startsWith('// Failed')) {
+        if (!code || code.startsWith('// Generation Failed')) {
             setError(code || 'No code available for this model.');
             return;
         }
 
-        const loadComponent = async () => {
+        async function loadComponent() {
             try {
                 // Sanitize the code to remove any rogue import statements that the AI might have added.
                 // This prevents multiple instances of libraries like Three.js from being loaded.
                 // The new regex is more robust and handles multi-line imports.
-                const sanitizedCode = code.replace(/import[\s\S]*?from\s*['"].*['"];?/g, '// Import removed by sanitizer');
+                let sanitizedCode = code.replace(/import[\s\S]*?from\s*['"].*['"];?/g, '// Import removed by sanitizer');
 
                 // The global `window.*` variables are populated in index.tsx
-                const fullCode = `
+                let fullCode = `
                     const React = window.React;
                     const THREE = window.THREE;
                     const Drei = window.ReactThreeDrei;
                     ${sanitizedCode}
                 `;
                 
-                const url = 'data:text/javascript;base64,' + btoa(fullCode);
-                const mod = await import(/* @vite-ignore */ url);
+                let url = 'data:text/javascript;base64,' + btoa(fullCode);
+                let mod = await import(/* @vite-ignore */ url);
                 
                 if (isMounted) {
                     if (mod.default && typeof mod.default === 'function') {
@@ -62,7 +63,7 @@ const DynamicModel: React.FC<{ code: string }> = ({ code }) => {
                     setError(e instanceof Error ? e.message : String(e));
                 }
             }
-        };
+        }
 
         loadComponent();
 
@@ -71,7 +72,7 @@ const DynamicModel: React.FC<{ code: string }> = ({ code }) => {
         };
     }, [code]);
 
-    const Drei = (window as any).ReactThreeDrei;
+    let Drei = (window as any).ReactThreeDrei;
     if (!Drei) return null; // Wait for Drei to be available
 
     if (error) {
@@ -80,7 +81,7 @@ const DynamicModel: React.FC<{ code: string }> = ({ code }) => {
 
     if (!Component) {
         return (
-             <Drei.Text color="white" fontSize={0.3} anchorX="center" anchorY="middle">Loading dynamic model...</Drei.Text>
+             <Drei.Text color="white" fontSize={0.3} anchorX="center" anchorY="middle">Assembling 3D components...</Drei.Text>
         );
     }
 
@@ -102,25 +103,25 @@ interface SpeechRecognition {
     onend: (() => void) | null;
 }
 
-const AnalysisResultDisplay: React.FC<{ result: StructuralAnalysisResult | CfdAnalysisResult }> = ({ result }) => {
+function AnalysisResultDisplay({ result }: { result: StructuralAnalysisResult | CfdAnalysisResult }): React.ReactElement {
     const tableData = useMemo(() => {
-        const rows = result.data.split('\n').filter(Boolean);
-        const header = rows[0].split(',');
-        const body = rows.slice(1).map(row => row.split(','));
+        let rows = result.data.split('\n').filter(Boolean);
+        let header = rows[0].split(',');
+        let body = rows.slice(1).map(row => row.split(','));
         return { header, body };
     }, [result.data]);
 
-    const handleDownload = (content: string, fileName: string, mimeType: string) => {
-        const blob = new Blob([content], { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+    function handleDownload(content: string, fileName: string, mimeType: string) {
+        let blob = new Blob([content], { type: mimeType });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
         a.href = url;
         a.download = fileName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-    };
+    }
 
     return (
         <div className="space-y-4">
@@ -166,11 +167,14 @@ const AnalysisResultDisplay: React.FC<{ result: StructuralAnalysisResult | CfdAn
 };
 
 
-export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefine, isLoadingRefinement }) => {
+export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: ModelViewerProps): React.ReactElement {
+  type AiTask = 'refining' | 'structural_analysis' | 'cfd_analysis';
+  
   const [refinementText, setRefinementText] = useState('');
   const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  
+  const [activeAiTask, setActiveAiTask] = useState<AiTask | null>(null);
+
   // Structural Analysis State
   const [analysisPrompt, setAnalysisPrompt] = useState('Perform a standard structural analysis assuming a uniformly distributed load of 15 kN/m and pinned supports at the base of all main columns. Use S235 steel properties.');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -184,11 +188,14 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
   const [cfdAnalysisResult, setCfdAnalysisResult] = useState<CfdAnalysisResult | null>(null);
   const [cfdAnalysisError, setCfdAnalysisError] = useState<string | null>(null);
   const [cfdLoadingMessage, setCfdLoadingMessage] = useState('');
+  
+  // Refinement State
+  const [refinementLoadingMessage, setRefinementLoadingMessage] = useState('');
 
   // Memoize speech recognition object and support
   const { isVoiceSupported, recognition } = useMemo(() => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const isSupported = !!SpeechRecognitionAPI;
+    let SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    let isSupported = !!SpeechRecognitionAPI;
     let rec: SpeechRecognition | null = null;
     if (isSupported) {
         rec = new SpeechRecognitionAPI();
@@ -200,9 +207,42 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
     return { isVoiceSupported: isSupported, recognition: rec };
   }, []);
 
+  // Effect to manage the active AI task state
+  useEffect(() => {
+    if (isLoadingRefinement) {
+        setActiveAiTask('refining');
+    } else if (isAnalyzing) {
+        setActiveAiTask('structural_analysis');
+    } else if (isCfdAnalyzing) {
+        setActiveAiTask('cfd_analysis');
+    } else {
+        setActiveAiTask(null);
+    }
+  }, [isLoadingRefinement, isAnalyzing, isCfdAnalyzing]);
+
+  // Effect for Refinement loading messages
+  useEffect(() => {
+    let refinementMessages = [
+        'Re-interpreting your instructions...',
+        'Generating new design brief...',
+        'Re-building 3D geometry...',
+        'Finalizing refined model...',
+    ];
+    let interval: ReturnType<typeof setInterval>;
+    if (isLoadingRefinement) {
+        let i = 0;
+        setRefinementLoadingMessage(refinementMessages[i]);
+        interval = setInterval(() => {
+            i = (i + 1) % refinementMessages.length;
+            setRefinementLoadingMessage(refinementMessages[i]);
+        }, 2500);
+    }
+    return () => clearInterval(interval);
+  }, [isLoadingRefinement]);
+
   // Effect for Structural Analysis loading messages
   useEffect(() => {
-    const structuralAnalysisMessages = [
+    let structuralAnalysisMessages = [
         'Simulating structural loads...',
         'Calculating stress and strain...',
         'Generating FEA plot...',
@@ -222,7 +262,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
 
   // Effect for CFD Analysis loading messages
   useEffect(() => {
-    const cfdAnalysisMessages = [
+    let cfdAnalysisMessages = [
         'Meshing geometry for fluid simulation...',
         'Solving Navier-Stokes equations...',
         'Visualizing airflow and pressure...',
@@ -240,23 +280,41 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
     return () => clearInterval(interval);
   }, [isCfdAnalyzing]);
 
+  const currentLoadingMessage = useMemo(() => {
+    switch (activeAiTask) {
+        case 'refining': return refinementLoadingMessage;
+        case 'structural_analysis': return analysisLoadingMessage;
+        case 'cfd_analysis': return cfdLoadingMessage;
+        default: return '';
+    }
+  }, [activeAiTask, refinementLoadingMessage, analysisLoadingMessage, cfdLoadingMessage]);
+
+  const activeTaskName = useMemo(() => {
+      switch (activeAiTask) {
+          case 'refining': return "Model Refinement";
+          case 'structural_analysis': return "Structural Analysis";
+          case 'cfd_analysis': return "CFD Analysis";
+          default: return null;
+      }
+  }, [activeAiTask]);
+
   useEffect(() => {
     if (!recognition) return;
 
-    const handleResult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
+    function handleResult(event: any) {
+        let transcript = event.results[0][0].transcript;
         setRefinementText(prev => prev ? `${prev} ${transcript}` : transcript);
         setIsRecording(false);
-    };
+    }
 
-    const handleError = (event: any) => {
+    function handleError(event: any) {
         console.error('Speech recognition error:', event.error);
         setIsRecording(false);
-    };
+    }
 
-    const handleEnd = () => {
+    function handleEnd() {
         setIsRecording(false);
-    };
+    }
 
     recognition.onresult = handleResult;
     recognition.onerror = handleError;
@@ -273,14 +331,14 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
     };
   }, [recognition]);
 
-  const handleRefine = () => {
+  function handleRefine() {
     if (refinementText.trim()) {
       onRefine(model.id, refinementText, model.inputIds);
       setRefinementText('');
     }
-  };
+  }
   
-  const handleToggleRecording = () => {
+  function handleToggleRecording() {
     if (!isVoiceSupported || !recognition) return;
     if (isRecording) {
         recognition.stop();
@@ -288,9 +346,9 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
         recognition.start();
         setIsRecording(true);
     }
-  };
+  }
 
-  const handleDownload = async (format: 'GLB' | 'FBX' | 'OBJ') => {
+  async function handleDownload(format: 'GLB' | 'FBX' | 'OBJ') {
     if (format !== 'OBJ') {
       alert(`Downloading ${format} files is not yet implemented. Please use OBJ format.`);
       return;
@@ -298,7 +356,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
 
     setDownloadingFormat(format);
     try {
-        const fileContent = await generateModelFileContent(model.description, 'obj');
+        let fileContent = await generateModelFileContent(model.description, 'obj');
 
         if (fileContent.startsWith('// Generation Failed')) {
             alert(`Failed to generate OBJ file: ${fileContent}`);
@@ -306,9 +364,9 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
             return;
         }
 
-        const blob = new Blob([fileContent], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
+        let blob = new Blob([fileContent], { type: 'text/plain' });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
         a.href = url;
         a.download = `steelforge-model-${model.id}.obj`;
         document.body.appendChild(a);
@@ -321,45 +379,66 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
     } finally {
         setDownloadingFormat(null);
     }
-  };
+  }
 
-  const handleRunAnalysis = async () => {
+  async function handleRunAnalysis() {
     if (!analysisPrompt.trim()) return;
     setIsAnalyzing(true);
     setAnalysisResult(null);
     setAnalysisError(null);
     try {
-        const result = await performStructuralAnalysis(model.description, analysisPrompt);
+        let result = await performStructuralAnalysis(model.description, analysisPrompt);
         setAnalysisResult(result);
     } catch (e: any) {
         setAnalysisError(e.message || "An unknown error occurred during analysis.");
     } finally {
         setIsAnalyzing(false);
     }
-  };
+  }
   
-  const handleRunCfdAnalysis = async () => {
+  async function handleRunCfdAnalysis() {
     if (!cfdPrompt.trim()) return;
     setIsCfdAnalyzing(true);
     setCfdAnalysisResult(null);
     setCfdAnalysisError(null);
     try {
-        const result = await performCfdAnalysis(model.description, cfdPrompt);
+        let result = await performCfdAnalysis(model.description, cfdPrompt);
         setCfdAnalysisResult(result);
     } catch (e: any) {
         setCfdAnalysisError(e.message || "An unknown error occurred during CFD analysis.");
     } finally {
         setIsCfdAnalyzing(false);
     }
-  };
+  }
 
   // Source R3F components from globals to ensure single instance
-  const { Canvas } = (window as any).ReactThreeFiber || {};
-  const Drei = (window as any).ReactThreeDrei;
+  let ReactThreeFiber = (window as any).ReactThreeFiber;
+  let Canvas = ReactThreeFiber ? ReactThreeFiber.Canvas : null;
+  let Drei = (window as any).ReactThreeDrei;
 
   if (!Canvas || !Drei) {
     return <div className="flex items-center justify-center h-full"><Spinner /> <p className="ml-4">Loading 3D libraries...</p></div>;
   }
+  
+  let ModelStatus = getModelStatus();
+  if (model.status === ModelStatus.FAILED) {
+    return (
+        <div className="bg-red-900/20 border border-red-700 text-red-300 p-6 rounded-lg text-center flex flex-col items-center">
+            <XCircleIcon className="w-12 h-12 text-highlight mb-4" />
+            <h3 className="text-xl font-bold text-light mb-2">Model Generation Failed</h3>
+            <p className="text-sm mb-4">The AI agent encountered an error while processing this model.</p>
+            {model.failureReason && (
+                <div className="w-full text-left">
+                    <p className="text-sm font-semibold text-light mb-2">Error Details:</p>
+                    <pre className="text-xs bg-primary p-3 rounded-md whitespace-pre-wrap font-mono max-h-60 overflow-y-auto">
+                        {model.failureReason}
+                    </pre>
+                </div>
+            )}
+        </div>
+    );
+  }
+
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-[75vh]">
@@ -378,6 +457,18 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
       </div>
 
       <div className="flex flex-col space-y-4 overflow-y-auto pr-2">
+        {activeAiTask && (
+            <div className="flex items-center space-x-3 bg-blue-900/50 border border-blue-700 text-blue-300 p-3 rounded-md mb-4">
+                <div className="animate-spin">
+                    <SparklesIcon className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                    <p className="font-semibold text-sm text-light">AI Task in Progress: {activeTaskName}</p>
+                    <p className="text-xs transition-opacity duration-500">{currentLoadingMessage}</p>
+                </div>
+            </div>
+        )}
+
         <div>
           <h3 className="text-xl font-semibold mb-2 text-highlight">AI-Generated Description</h3>
           <p className="text-muted bg-primary p-4 rounded-md whitespace-pre-wrap">{model.description}</p>
@@ -403,7 +494,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
             {isVoiceSupported && (
                 <button
                     onClick={handleToggleRecording}
-                    disabled={isLoadingRefinement}
+                    disabled={activeAiTask !== null || isRecording}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'bg-highlight text-white animate-pulse' : 'text-muted hover:text-light hover:bg-secondary'}`}
                     title="Record voice command"
                 >
@@ -412,7 +503,7 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
             )}
            </div>
           {isRecording && <p className="text-sm text-highlight mt-1 text-center">Listening...</p>}
-          <Button onClick={handleRefine} isLoading={isLoadingRefinement} className="w-full mt-2" disabled={isLoadingRefinement || isRecording}>
+          <Button onClick={handleRefine} isLoading={isLoadingRefinement} className="w-full mt-2" disabled={activeAiTask !== null || isRecording}>
             Generate Refinement
           </Button>
         </div>
@@ -426,11 +517,10 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
                 rows={4}
                 className="w-full bg-primary text-light p-3 rounded-md border border-gray-600 focus:ring-accent focus:border-accent"
             />
-            <Button onClick={handleRunAnalysis} isLoading={isAnalyzing} className="w-full mt-2">
+            <Button onClick={handleRunAnalysis} isLoading={isAnalyzing} className="w-full mt-2" disabled={activeAiTask !== null}>
                 <SparklesIcon className="w-5 h-5 mr-2" />
                 Run Analysis with AI
             </Button>
-            {isAnalyzing && <p className="text-sm text-highlight mt-2 text-center transition-opacity duration-300">{analysisLoadingMessage}</p>}
             {analysisError && <p className="text-sm text-red-400 mt-2 p-3 bg-red-900/20 rounded-md">{analysisError}</p>}
             {analysisResult && (
                 <div className="mt-4 p-4 bg-secondary rounded-lg border border-gray-700">
@@ -449,11 +539,10 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
                 rows={4}
                 className="w-full bg-primary text-light p-3 rounded-md border border-gray-600 focus:ring-accent focus:border-accent"
             />
-            <Button onClick={handleRunCfdAnalysis} isLoading={isCfdAnalyzing} className="w-full mt-2">
+            <Button onClick={handleRunCfdAnalysis} isLoading={isCfdAnalyzing} className="w-full mt-2" disabled={activeAiTask !== null}>
                 <WindIcon className="w-5 h-5 mr-2" />
                 Run CFD Analysis with AI
             </Button>
-            {isCfdAnalyzing && <p className="text-sm text-highlight mt-2 text-center transition-opacity duration-300">{cfdLoadingMessage}</p>}
             {cfdAnalysisError && <p className="text-sm text-red-400 mt-2 p-3 bg-red-900/20 rounded-md">{cfdAnalysisError}</p>}
             {cfdAnalysisResult && (
                 <div className="mt-4 p-4 bg-secondary rounded-lg border border-gray-700">
@@ -515,4 +604,4 @@ export const ModelViewer: React.FC<ModelViewerProps> = ({ model, inputs, onRefin
       </div>
     </div>
   );
-};
+}

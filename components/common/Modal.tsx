@@ -1,5 +1,4 @@
 
-
 import React, { useEffect } from 'react';
 import { XIcon } from '../icons';
 
@@ -10,13 +9,13 @@ interface ModalProps {
   title: string;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
+export function Modal({ isOpen, onClose, children, title }: ModalProps): React.ReactElement | null {
   useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
+    function handleEsc(event: KeyboardEvent) {
       if (event.key === 'Escape') {
         onClose();
       }
-    };
+    }
     window.addEventListener('keydown', handleEsc);
     return () => {
       window.removeEventListener('keydown', handleEsc);
