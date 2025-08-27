@@ -1,9 +1,10 @@
 
 
+
 import React, { useState, useMemo } from 'react';
 import { useProjects } from '../context/ProjectContext';
 import { useAgent } from '../context/AgentContext';
-import { Project, DesignInput, ModelOutput, DesignInputType, ExecutionPlan, Task, TaskStatus, getTaskStatus, getModelStatus, getDesignInputType } from '../types';
+import { Project, DesignInput, ModelOutput, DesignInputType, ExecutionPlan, Task, TaskStatus, StructuralAnalysisResult, getTaskStatus, getModelStatus, getDesignInputType } from '../types';
 import { InputForm } from './InputForm';
 import { ModelCard } from './ModelCard';
 import { Button } from './common/Button';
@@ -13,6 +14,8 @@ import { createExecutionPlan, executePlan } from '../agent/index';
 import { Modal } from './common/Modal';
 import { ModelViewer } from './ModelViewer';
 import { CodeGeneratorModal } from './CodeGeneratorModal';
+import { performStructuralAnalysis } from '../services/geminiService';
+import { AnalysisResultDisplay } from './AnalysisResultDisplay';
 
 function TaskStatusIcon({ status }: { status: TaskStatus }): React.ReactElement | null {
     const TaskStatus = getTaskStatus();
@@ -72,6 +75,14 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
   const [isCodeGeneratorOpen, setIsCodeGeneratorOpen] = useState(false);
   const [currentModel, setCurrentModel] = useState<ModelOutput | null>(null);
   const [inputFilter, setInputFilter] = useState<InputFilter>('ALL');
+  
+  // State for Quick Structural Analysis
+  const [selectedModelIdForAnalysis, setSelectedModelIdForAnalysis] = useState<string | null>(null);
+  const [analysisPrompt, setAnalysisPrompt] = useState('Perform a standard structural analysis assuming a uniformly distributed load of 15 kN/m and pinned supports at the base of all main columns. Use S235 steel properties.');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<StructuralAnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
 
   const TaskStatus = getTaskStatus();
   const ModelStatus = getModelStatus();
@@ -88,6 +99,11 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
     }
     return project.inputs.filter(input => input.type === inputFilter);
   }, [project, inputFilter]);
+  
+  const completedModels = useMemo(() => {
+    if (!project) return [];
+    return project.models.filter(m => m.status === ModelStatus.COMPLETED);
+  }, [project, ModelStatus.COMPLETED]);
 
 
   function handleToggleInput(inputId: string) {
@@ -156,6 +172,28 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
             }
         }
     });
+  }
+
+  async function handleRunQuickAnalysis() {
+    if (!selectedModelIdForAnalysis || !analysisPrompt.trim() || !project) return;
+    
+    const modelToAnalyze = project.models.find(m => m.id === selectedModelIdForAnalysis);
+    if (!modelToAnalyze) {
+        setAnalysisError("Selected model could not be found.");
+        return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisResult(null);
+    setAnalysisError(null);
+    try {
+        const result = await performStructuralAnalysis(modelToAnalyze.description, analysisPrompt);
+        setAnalysisResult(result);
+    } catch (e: any) {
+        setAnalysisError(e.message || "An unknown error occurred during analysis.");
+    } finally {
+        setIsAnalyzing(false);
+    }
   }
 
   function openViewer(model: ModelOutput) {
@@ -272,6 +310,56 @@ export function ProjectView({ projectId, onBack }: { projectId: string; onBack: 
               Open Code Generator
             </Button>
           </div>
+          
+           <div className="bg-secondary p-6 rounded-lg shadow-xl">
+                <h3 className="text-xl font-semibold">Quick Structural Analysis</h3>
+                <p className="text-muted text-sm mt-1">Select a completed model to run an analysis without opening the full viewer.</p>
+                
+                <div className="mt-4 space-y-3">
+                    <select
+                        value={selectedModelIdForAnalysis || ''}
+                        onChange={e => {
+                            setSelectedModelIdForAnalysis(e.target.value);
+                            setAnalysisResult(null);
+                            setAnalysisError(null);
+                        }}
+                        disabled={completedModels.length === 0 || isAnalyzing}
+                        className="w-full bg-primary text-light px-3 py-2 rounded-md border border-gray-600 focus:ring-accent focus:border-accent disabled:opacity-50"
+                    >
+                        <option value="">{completedModels.length === 0 ? 'No completed models available' : 'Select a model...'}</option>
+                        {completedModels.map(m => (
+                            <option key={m.id} value={m.id}>Model: {m.id.slice(-6)} - {m.description.substring(0, 40)}...</option>
+                        ))}
+                    </select>
+
+                    <textarea
+                        value={analysisPrompt}
+                        onChange={e => setAnalysisPrompt(e.target.value)}
+                        rows={3}
+                        className="w-full bg-primary text-light p-3 rounded-md border border-gray-600 focus:ring-accent focus:border-accent disabled:opacity-50"
+                        placeholder="Enter loading conditions..."
+                        disabled={!selectedModelIdForAnalysis || isAnalyzing}
+                    />
+
+                    <Button
+                        onClick={handleRunQuickAnalysis}
+                        isLoading={isAnalyzing}
+                        disabled={!selectedModelIdForAnalysis || isAgentBusy || isAnalyzing}
+                        className="w-full"
+                    >
+                        <SparklesIcon className="w-5 h-5 mr-2" />
+                        Run Analysis
+                    </Button>
+
+                    {analysisError && <p className="text-sm text-red-400 mt-2 p-3 bg-red-900/20 rounded-md">{analysisError}</p>}
+                    {analysisResult && (
+                        <div className="mt-4 p-4 bg-primary rounded-lg border border-gray-700">
+                            <h3 className="text-lg font-bold text-highlight mb-3">Quick Analysis Result</h3>
+                            <AnalysisResultDisplay result={analysisResult} />
+                        </div>
+                    )}
+                </div>
+            </div>
 
           <div className="bg-secondary p-6 rounded-lg shadow-xl">
              <h3 className="text-xl font-semibold mb-3">Agent Activity</h3>
