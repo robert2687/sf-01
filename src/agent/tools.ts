@@ -1,0 +1,1 @@
+// This file is deprecated. Its contents have been merged into the version at '/agent/tools.ts' to resolve structural conflicts.

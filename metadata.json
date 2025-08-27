@@ -1,0 +1,9 @@
+{
+  "name": "SteelForge AI",
+  "description": "An AI-powered 3D visualization tool for steel structure contractors and fabricators. Generate and refine 3D models from text descriptions, photos, and hand-drawn sketches using an intelligent AI agent. Show preview images for projects\n",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "prompt": ""
+}

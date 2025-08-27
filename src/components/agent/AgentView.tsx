@@ -1,0 +1,1 @@
+// This file is deprecated. Its contents have been merged into the version at '/components/agent/AgentView.tsx' to resolve structural conflicts.

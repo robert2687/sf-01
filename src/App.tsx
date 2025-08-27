@@ -1,0 +1,1 @@
+// This file is deprecated. Its contents have been merged into the version at '/App.tsx' to resolve structural conflicts.
