@@ -1,6 +1,7 @@
 
 
 
+
 import React, { Suspense, useState, useEffect, useMemo } from 'react';
 // Canvas and Drei are now sourced from window globals to ensure a single instance.
 // import { Canvas } from '@react-three/fiber';
@@ -12,6 +13,7 @@ import { Button } from './common/Button';
 import { DownloadIcon, MicrophoneIcon, SparklesIcon, WindIcon, XCircleIcon } from './icons';
 import { generateModelFileContent, performStructuralAnalysis, performCfdAnalysis } from '../services/geminiService';
 import { AnalysisResultDisplay } from './AnalysisResultDisplay';
+import { ErrorBoundary } from './common/ErrorBoundary';
 
 interface ModelViewerProps {
   model: ModelOutput;
@@ -388,7 +390,13 @@ export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: Mo
         <Canvas camera={{ fov: 45 }}>
           <Suspense fallback={null}>
             <Drei.Stage intensity={0.6} environment={null}>
-                {model.modelCode ? <DynamicModel code={model.modelCode} /> : <SteelFrame />}
+                <ErrorBoundary fallback={
+                    <Drei.Text color="red" fontSize={0.2} maxWidth={5} textAlign="center" >
+                        {'Rendering failed.\nThe AI-generated code\ncontains a runtime error.'}
+                    </Drei.Text>
+                }>
+                    {model.modelCode ? <DynamicModel code={model.modelCode} /> : <SteelFrame />}
+                </ErrorBoundary>
             </Drei.Stage>
           </Suspense>
           <Drei.OrbitControls makeDefault autoRotate />

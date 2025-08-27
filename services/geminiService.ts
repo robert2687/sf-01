@@ -94,13 +94,13 @@ export async function generateModelData(
   let systemInstruction = systemPrompt || `You are an expert in 3D modeling and React component generation, specifically using @react-three/drei and THREE.js. Your task is to convert a technical description of a steel structure into a JSON object containing a React component string, a Bill of Materials, and an engineering rationale.
 
 **CRITICAL RULES:**
-1.  **NO JSX SYNTAX:** The output `modelCode` string **MUST** use \`React.createElement()\` exclusively. Do not use JSX tags like \`<Drei.Box>\`.
+1.  **NO JSX SYNTAX:** The output \`modelCode\` string **MUST** use \`React.createElement()\` exclusively. Do not use JSX tags like \`<Drei.Box>\`.
 2.  **USE GLOBAL VARIABLES:** The code **MUST** reference libraries from the \`window\` object (e.g., \`window.React\`, \`window.THREE\`, \`window.ReactThreeDrei\`). Do **NOT** include any \`import\` statements.
 3.  **DEFAULT EXPORT:** The generated code string **MUST** have a default export of a functional React component.
 4.  **SYNTACTICALLY CORRECT:** The generated Javascript code must be 100% syntactically correct and ready for dynamic import.
 5.  **COMPLETE JSON:** The entire output must be a single, valid JSON object that adheres to the provided schema.
 
-**EXAMPLE of CORRECT `modelCode` SYNTAX:**
+**EXAMPLE of CORRECT \`modelCode\` SYNTAX:**
 \`\`\`javascript
 export default function Model(props) {
   const React = window.React;
@@ -147,19 +147,30 @@ export default function Model(props) {
         },
       });
 
-      let responseText = response.text.trim();
-      let parsedResponse;
-
-      try {
-          parsedResponse = JSON.parse(responseText);
-      } catch (e) {
-          console.error(`Attempt ${attempt}: JSON parsing failed.`, e);
-          throw new Error(`Invalid JSON response from AI: ${responseText}`);
+      // Robustly find and parse the JSON block from the AI's response.
+      const rawResponse = response.text.trim();
+      let jsonString = rawResponse;
+      const jsonMatch = rawResponse.match(/```(json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[2]) {
+        jsonString = jsonMatch[2];
       }
       
+      let parsedResponse;
+      try {
+        parsedResponse = JSON.parse(jsonString);
+      } catch (e) {
+        console.error(`Attempt ${attempt}: JSON parsing failed. Raw response: "${rawResponse}"`, e);
+        throw new Error(`Invalid JSON response from AI. Sanitized attempt: ${jsonString}`);
+      }
+
+      // Validate the structure of the parsed object.
+      if (typeof parsedResponse !== 'object' || parsedResponse === null || !('modelCode' in parsedResponse) || typeof parsedResponse.modelCode !== 'string') {
+        throw new Error(`AI response is not a valid object with a 'modelCode' string property. Response: ${jsonString}`);
+      }
+
       let { modelCode, billOfMaterials, engineeringRationale } = parsedResponse;
       
-      if (!modelCode || !modelCode.includes('export default')) {
+      if (!modelCode.includes('export default')) {
            throw new Error("Generated code is missing a default export.");
       }
       
@@ -173,7 +184,8 @@ export default function Model(props) {
         await import(/* @vite-ignore */ url);
       } catch (e) {
         console.error(`Attempt ${attempt}: Dynamic import validation failed.`, e);
-        throw new Error(`Generated code has a syntax error: ${e}`);
+        const originalErrorMessage = e instanceof Error ? e.message : String(e);
+        throw new Error(`Generated code failed validation. Reason: ${originalErrorMessage}`);
       }
 
       return { modelCode, billOfMaterials, engineeringRationale };
@@ -273,10 +285,17 @@ async function performAnalysis(
     });
 
     try {
-        let result = JSON.parse(response.text.trim());
-        // Basic validation
-        if (!result.imageUrl.startsWith('data:image/png;base64,')) {
-            throw new Error('AI did not return a valid data URL for the image.');
+        const rawResponse = response.text.trim();
+        let jsonString = rawResponse;
+        const jsonMatch = rawResponse.match(/```(json)?\s*([\s\S]*?)\s*```/);
+        if (jsonMatch && jsonMatch[2]) {
+            jsonString = jsonMatch[2];
+        }
+        
+        const result = JSON.parse(jsonString);
+
+        if (typeof result !== 'object' || result === null || !result.imageUrl || !result.imageUrl.startsWith('data:image/png;base64,')) {
+            throw new Error('AI did not return a valid object or a valid data URL for the image.');
         }
         return result;
     } catch(e) {
