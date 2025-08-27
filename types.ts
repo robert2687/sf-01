@@ -120,7 +120,7 @@ export interface Project {
   models: ModelOutput[];
   plans: ExecutionPlan[];
   createdAt: string;
-  previewImageUrl?: string;
+  visualBrief?: { text: string; imageUrl: string; };
 }
 
 export interface MarketplaceComponent {

@@ -3,8 +3,8 @@ import React, { useState, useMemo } from 'react';
 import { useProjects } from '../context/ProjectContext';
 import { Card } from './common/Card';
 import { Button } from './common/Button';
-import { PlusIcon, CubeIcon, ImageIcon, SparklesIcon } from './icons';
-import { generateProjectPreviewImage } from '../services/geminiService';
+import { PlusIcon, CubeIcon, SparklesIcon } from './icons';
+import { generateProjectVisualBrief } from '../services/geminiService';
 import { Project } from '../types';
 
 interface ProjectListProps {
@@ -16,7 +16,7 @@ export function ProjectList({ onSelectProject }: ProjectListProps): React.ReactE
   const [showForm, setShowForm] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [generatingPreviewId, setGeneratingPreviewId] = useState<string | null>(null);
+  const [generatingBriefId, setGeneratingBriefId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'name-asc'>('date-desc');
 
@@ -50,20 +50,16 @@ export function ProjectList({ onSelectProject }: ProjectListProps): React.ReactE
     }
   }
 
-  async function handleGeneratePreview(project: Project) {
-    setGeneratingPreviewId(project.id);
+  async function handleGenerateBrief(project: Project) {
+    setGeneratingBriefId(project.id);
     try {
-        const imageUrl = await generateProjectPreviewImage(project);
-        if (imageUrl.startsWith('data:image')) {
-            updateProject(project.id, { previewImageUrl: imageUrl });
-        } else {
-            alert(`Could not generate preview: ${imageUrl}`);
-        }
+        const brief = await generateProjectVisualBrief(project);
+        updateProject(project.id, { visualBrief: brief });
     } catch (error) {
         console.error(error);
-        alert('An unexpected error occurred while generating the preview.');
+        alert(error instanceof Error ? error.message : 'An unexpected error occurred while generating the brief.');
     } finally {
-        setGeneratingPreviewId(null);
+        setGeneratingBriefId(null);
     }
   }
 
@@ -137,26 +133,31 @@ export function ProjectList({ onSelectProject }: ProjectListProps): React.ReactE
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredAndSortedProjects.map(project => {
-            const isGeneratingThisPreview = generatingPreviewId === project.id;
+            const isGeneratingThisBrief = generatingBriefId === project.id;
             return (
                 <Card key={project.id} onClick={() => onSelectProject(project.id)} className="flex flex-col group">
                     <div className="relative aspect-[16/9] bg-primary overflow-hidden">
-                        {project.previewImageUrl ? (
-                            <img src={project.previewImageUrl} alt={`${project.name} preview`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                        {project.visualBrief ? (
+                           <>
+                                <img src={project.visualBrief.imageUrl} alt="Visual brief background" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                <div className="absolute inset-0 bg-black/60 p-4 flex items-center justify-center backdrop-blur-sm">
+                                    <p className="text-center text-sm text-light italic leading-relaxed">"{project.visualBrief.text}"</p>
+                                </div>
+                            </>
                         ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center text-muted bg-secondary p-4 text-center">
-                                <ImageIcon className="w-12 h-12 mb-2 text-gray-500" />
-                                <p className="text-sm font-medium">Visual Summary</p>
-                                <p className="text-xs text-gray-400 mb-4">Generate an AI-powered preview of your project.</p>
+                                <SparklesIcon className="w-12 h-12 mb-2 text-gray-500" />
+                                <p className="text-sm font-medium">Visual Brief</p>
+                                <p className="text-xs text-gray-400 mb-4">Let AI generate a conceptual description for a project rendering.</p>
                                 <Button
                                     variant="primary"
-                                    onClick={(e) => { e.stopPropagation(); handleGeneratePreview(project); }}
-                                    isLoading={isGeneratingThisPreview}
-                                    disabled={generatingPreviewId !== null}
+                                    onClick={(e) => { e.stopPropagation(); handleGenerateBrief(project); }}
+                                    isLoading={isGeneratingThisBrief}
+                                    disabled={generatingBriefId !== null}
                                     className="text-xs px-3 py-1.5"
                                 >
-                                    {!isGeneratingThisPreview && <SparklesIcon className="w-4 h-4 mr-1" />}
-                                    {isGeneratingThisPreview ? 'Creating Visuals...' : 'Generate Preview'}
+                                    {!isGeneratingThisBrief && <SparklesIcon className="w-4 h-4 mr-1" />}
+                                    {isGeneratingThisBrief ? 'Generating Brief...' : 'Generate Brief'}
                                 </Button>
                             </div>
                         )}

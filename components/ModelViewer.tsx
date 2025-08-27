@@ -111,6 +111,7 @@ export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: Mo
   const [refinementText, setRefinementText] = useState('');
   const [downloadingFormat, setDownloadingFormat] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [activeAiTask, setActiveAiTask] = useState<AiTask | null>(null);
 
   // Structural Analysis State
@@ -247,11 +248,13 @@ export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: Mo
 
     function handleError(event: any) {
         console.error('Speech recognition error:', event.error);
+        setVoiceError(`Voice error: ${event.error}. Please try again.`);
         setIsRecording(false);
+        setTimeout(() => setVoiceError(null), 5000); // Clear the error after 5 seconds
     }
 
     function handleEnd() {
-        setIsRecording(false);
+        setIsRecording(false); // This is called on successful recognition and on timeout/error
     }
 
     recognition.onresult = handleResult;
@@ -281,6 +284,7 @@ export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: Mo
     if (isRecording) {
         recognition.stop();
     } else {
+        setVoiceError(null); // Clear any previous errors before starting
         recognition.start();
         setIsRecording(true);
     }
@@ -432,15 +436,17 @@ export function ModelViewer({ model, inputs, onRefine, isLoadingRefinement }: Mo
             {isVoiceSupported && (
                 <button
                     onClick={handleToggleRecording}
-                    disabled={activeAiTask !== null || isRecording}
+                    disabled={activeAiTask !== null}
                     className={`absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'bg-highlight text-white animate-pulse' : 'text-muted hover:text-light hover:bg-secondary'}`}
                     title="Record voice command"
+                    aria-label="Start voice recording"
                 >
                     <MicrophoneIcon className="w-5 h-5" />
                 </button>
             )}
            </div>
-          {isRecording && <p className="text-sm text-highlight mt-1 text-center">Listening...</p>}
+          {isRecording && <p className="text-sm text-highlight mt-1 text-center" aria-live="assertive">Listening...</p>}
+          {voiceError && <p className="text-sm text-red-400 mt-1 text-center" role="alert">{voiceError}</p>}
           <Button onClick={handleRefine} isLoading={isLoadingRefinement} className="w-full mt-2" disabled={activeAiTask !== null || isRecording}>
             Generate Refinement
           </Button>

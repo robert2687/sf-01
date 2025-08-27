@@ -194,29 +194,32 @@ export default function Model(props) {
   throw new Error("Model generation failed after all retries.");
 };
 
-export async function generateProjectPreviewImage(project: Project): Promise<string> {
+export async function generateProjectVisualBrief(project: Project): Promise<{ text: string; imageUrl: string; }> {
     try {
-        let prompt = `Create a photorealistic, architectural concept rendering of the following steel structure project. The image should look like a professional marketing visual. Project details:
+        const prompt = `You are an AI assistant for an architectural design firm. Your task is to generate a short, compelling "Visual Brief" for a steel structure project. This brief should read like an art director's concept for a photorealistic rendering. Describe the mood, lighting, materials, and environment in a way that paints a vivid picture for the client. Keep it concise (2-3 sentences).
+
+        Project Details:
         - Name: ${project.name}
         - Description: ${project.description}
         - Key Inputs: ${project.inputs.map(i => i.data).join(', ')}.
-        Style: Modern, clean, slightly overcast sky for soft lighting. Focus on the steel frame itself.`;
 
-        let response = await getAi().models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt,
+        Generate the visual brief text only.`;
+
+        const response = await getAi().models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
             config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/png',
-                aspectRatio: '16:9',
-            },
+                temperature: 0.8,
+            }
         });
         
-        let base64ImageBytes = response.generatedImages[0].image.imageBytes;
-        return `data:image/png;base64,${base64ImageBytes}`;
+        return {
+            text: response.text.trim(),
+            imageUrl: 'https://storage.googleapis.com/maker-suite-guides/steel-forge/visual-brief-bg.png'
+        };
     } catch (error) {
-        console.error("Error generating project preview image:", error);
-        return error instanceof Error ? error.message : String(error);
+        console.error("Error generating project visual brief:", error);
+        throw new Error("The AI failed to generate a visual brief. Please try again later.");
     }
 };
 
